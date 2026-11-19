@@ -3,7 +3,7 @@ mod dock;
 
 use tauri::{Manager, WindowEvent};
 
-use crate::dock::{DockAnchor, DockManager, MAIN_WINDOW_LABEL};
+use crate::dock::{DockEdge, DockManager, MAIN_WINDOW_LABEL};
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -16,22 +16,32 @@ pub fn run() {
             dock::setup_global_shortcuts(handle);
 
             if let Some(window) = app.get_webview_window(MAIN_WINDOW_LABEL) {
-                let _ = dock::snap_window(&window, DockAnchor::TopRight);
+                let manager = app.state::<DockManager>();
+                let _ = dock::apply_window_geometry(&window, &manager, DockEdge::Right, false);
             }
 
             Ok(())
         })
         .on_window_event(|window, event| {
-            if window.label() == MAIN_WINDOW_LABEL {
-                if let WindowEvent::CloseRequested { api, .. } = event {
+            if window.label() != MAIN_WINDOW_LABEL {
+                return;
+            }
+            match event {
+                WindowEvent::CloseRequested { api, .. } => {
                     api.prevent_close();
                     dock::hide_window(window.app_handle());
                 }
+                WindowEvent::Moved(_) => {
+                    dock::handle_window_moved(window.app_handle());
+                }
+                _ => {}
             }
         })
         .invoke_handler(tauri::generate_handler![
             commands::get_dock_state,
-            commands::snap_dock,
+            commands::set_dock_edge,
+            commands::set_dock_expanded,
+            commands::toggle_dock_expanded,
             commands::set_always_on_top,
             commands::hide_dock,
         ])

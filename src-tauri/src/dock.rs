@@ -1,24 +1,34 @@
 use serde::{Deserialize, Serialize};
-use std::sync::Mutex;
+use std::sync::{
+    atomic::{AtomicU64, Ordering},
+    Mutex,
+};
+use std::time::{Duration, Instant};
 use tauri::{
     menu::{Menu, MenuItem, PredefinedMenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
-    AppHandle, Emitter, Manager, PhysicalPosition, WebviewWindow,
+    AppHandle, Emitter, Manager, PhysicalPosition, PhysicalSize, WebviewWindow,
 };
 use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut, ShortcutState};
 
 pub const MAIN_WINDOW_LABEL: &str = "main";
-const EDGE_MARGIN_LOGICAL: f64 = 16.0;
-const TASKBAR_RESERVE_LOGICAL: f64 = 52.0;
+
+const COLLAPSED_THICKNESS_LOGICAL: f64 = 56.0;
+const COLLAPSED_LENGTH_LOGICAL: f64 = 236.0;
+const EXPANDED_SIDE_WIDTH_LOGICAL: f64 = 404.0;
+const EXPANDED_SIDE_HEIGHT_LOGICAL: f64 = 540.0;
+const EXPANDED_TOP_WIDTH_LOGICAL: f64 = 420.0;
+const EXPANDED_TOP_HEIGHT_LOGICAL: f64 = 500.0;
+const TASKBAR_RESERVE_LOGICAL: f64 = 48.0;
+const DRAG_SNAP_DEBOUNCE_MS: u64 = 240;
+const PROGRAMMATIC_MOVE_GUARD_MS: u64 = 220;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
-pub enum DockAnchor {
-    TopLeft,
-    TopCenter,
-    TopRight,
-    BottomLeft,
-    BottomRight,
+pub enum DockEdge {
+    Right,
+    Left,
+    Top,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -31,7 +41,8 @@ pub struct DockShortcuts {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DockState {
-    pub anchor: DockAnchor,
+    pub edge: DockEdge,
+    pub expanded: bool,
     pub always_on_top: bool,
     pub visible: bool,
     pub shortcuts: DockShortcuts,
@@ -40,7 +51,8 @@ pub struct DockState {
 impl Default for DockState {
     fn default() -> Self {
         Self {
-            anchor: DockAnchor::TopRight,
+            edge: DockEdge::Right,
+            expanded: false,
             always_on_top: true,
             visible: true,
             shortcuts: DockShortcuts {
@@ -53,12 +65,16 @@ impl Default for DockState {
 
 pub struct DockManager {
     state: Mutex<DockState>,
+    move_seq: AtomicU64,
+    ignore_moves_until: Mutex<Instant>,
 }
 
 impl DockManager {
     pub fn new() -> Self {
         Self {
             state: Mutex::new(DockState::default()),
+            move_seq: AtomicU64::new(0),
+            ignore_moves_until: Mutex::new(Instant::now()),
         }
     }
 
@@ -66,9 +82,15 @@ impl DockManager {
         self.state.lock().expect("dock state poisoned").clone()
     }
 
-    pub fn set_anchor(&self, anchor: DockAnchor) -> DockState {
+    pub fn set_edge(&self, edge: DockEdge) -> DockState {
         let mut guard = self.state.lock().expect("dock state poisoned");
-        guard.anchor = anchor;
+        guard.edge = edge;
+        guard.clone()
+    }
+
+    pub fn set_expanded(&self, expanded: bool) -> DockState {
+        let mut guard = self.state.lock().expect("dock state poisoned");
+        guard.expanded = expanded;
         guard.clone()
     }
 
@@ -83,38 +105,108 @@ impl DockManager {
         guard.visible = visible;
         guard.clone()
     }
+
+    fn suppress_move_events(&self) {
+        self.move_seq.fetch_add(1, Ordering::SeqCst);
+        let mut guard = self
+            .ignore_moves_until
+            .lock()
+            .expect("ignore_moves_until poisoned");
+        *guard = Instant::now() + Duration::from_millis(PROGRAMMATIC_MOVE_GUARD_MS);
+    }
+
+    fn is_ignoring_moves(&self) -> bool {
+        let guard = self
+            .ignore_moves_until
+            .lock()
+            .expect("ignore_moves_until poisoned");
+        Instant::now() < *guard
+    }
+
+    fn bump_move_seq(&self) -> u64 {
+        self.move_seq.fetch_add(1, Ordering::SeqCst) + 1
+    }
+
+    fn current_move_seq(&self) -> u64 {
+        self.move_seq.load(Ordering::SeqCst)
+    }
 }
 
-pub fn compute_anchor_position(
+pub fn compute_dock_size(edge: DockEdge, expanded: bool) -> (f64, f64) {
+    match (edge, expanded) {
+        (DockEdge::Right | DockEdge::Left, false) => {
+            (COLLAPSED_THICKNESS_LOGICAL, COLLAPSED_LENGTH_LOGICAL)
+        }
+        (DockEdge::Top, false) => (COLLAPSED_LENGTH_LOGICAL, COLLAPSED_THICKNESS_LOGICAL),
+        (DockEdge::Right | DockEdge::Left, true) => {
+            (EXPANDED_SIDE_WIDTH_LOGICAL, EXPANDED_SIDE_HEIGHT_LOGICAL)
+        }
+        (DockEdge::Top, true) => (EXPANDED_TOP_WIDTH_LOGICAL, EXPANDED_TOP_HEIGHT_LOGICAL),
+    }
+}
+
+pub fn compute_dock_rect(
     monitor_x: i32,
     monitor_y: i32,
     monitor_w: u32,
     monitor_h: u32,
-    window_w: u32,
-    window_h: u32,
     scale_factor: f64,
-    anchor: DockAnchor,
-) -> (i32, i32) {
-    let margin = (EDGE_MARGIN_LOGICAL * scale_factor).round() as i32;
-    let bottom_margin = (TASKBAR_RESERVE_LOGICAL * scale_factor).round() as i32;
+    edge: DockEdge,
+    expanded: bool,
+) -> (i32, i32, u32, u32) {
+    let (logical_w, logical_h) = compute_dock_size(edge, expanded);
+    let phys_w = (logical_w * scale_factor).round().max(1.0) as u32;
+    let phys_h = (logical_h * scale_factor).round().max(1.0) as u32;
+    let taskbar_reserve = (TASKBAR_RESERVE_LOGICAL * scale_factor).round() as i32;
+
     let mw = monitor_w as i32;
     let mh = monitor_h as i32;
-    let ww = window_w as i32;
-    let wh = window_h as i32;
+    let ww = phys_w as i32;
+    let wh = phys_h as i32;
+    let usable_h = (mh - taskbar_reserve).max(wh);
 
-    match anchor {
-        DockAnchor::TopLeft => (monitor_x + margin, monitor_y + margin),
-        DockAnchor::TopCenter => (monitor_x + (mw - ww) / 2, monitor_y + margin),
-        DockAnchor::TopRight => (monitor_x + mw - ww - margin, monitor_y + margin),
-        DockAnchor::BottomLeft => (monitor_x + margin, monitor_y + mh - wh - bottom_margin),
-        DockAnchor::BottomRight => (
-            monitor_x + mw - ww - margin,
-            monitor_y + mh - wh - bottom_margin,
-        ),
+    let (x, y) = match edge {
+        DockEdge::Right => (monitor_x + mw - ww, monitor_y + (usable_h - wh) / 2),
+        DockEdge::Left => (monitor_x, monitor_y + (usable_h - wh) / 2),
+        DockEdge::Top => (monitor_x + (mw - ww) / 2, monitor_y),
+    };
+
+    (x, y, phys_w, phys_h)
+}
+
+pub fn compute_nearest_edge(
+    monitor_x: i32,
+    monitor_y: i32,
+    monitor_w: u32,
+    monitor_h: u32,
+    win_x: i32,
+    win_y: i32,
+    win_w: u32,
+    win_h: u32,
+) -> DockEdge {
+    let cx = win_x + (win_w as i32) / 2;
+    let cy = win_y + (win_h as i32) / 2;
+
+    let dist_left = (cx - monitor_x).max(0);
+    let dist_right = (monitor_x + monitor_w as i32 - cx).max(0);
+    let dist_top = (cy - monitor_y).max(0);
+    let _ = monitor_h;
+
+    if dist_top < dist_left && dist_top < dist_right {
+        DockEdge::Top
+    } else if dist_left < dist_right {
+        DockEdge::Left
+    } else {
+        DockEdge::Right
     }
 }
 
-pub fn snap_window(window: &WebviewWindow, anchor: DockAnchor) -> Result<(), String> {
+pub fn apply_window_geometry(
+    window: &WebviewWindow,
+    manager: &DockManager,
+    edge: DockEdge,
+    expanded: bool,
+) -> Result<(), String> {
     let monitor = window
         .current_monitor()
         .map_err(|e| e.to_string())?
@@ -124,33 +216,40 @@ pub fn snap_window(window: &WebviewWindow, anchor: DockAnchor) -> Result<(), Str
     let monitor_pos = monitor.position();
     let monitor_size = monitor.size();
     let scale = monitor.scale_factor();
-    let win_size = window.outer_size().map_err(|e| e.to_string())?;
 
-    let (x, y) = compute_anchor_position(
+    let (x, y, phys_w, phys_h) = compute_dock_rect(
         monitor_pos.x,
         monitor_pos.y,
         monitor_size.width,
         monitor_size.height,
-        win_size.width,
-        win_size.height,
         scale,
-        anchor,
+        edge,
+        expanded,
     );
 
+    manager.suppress_move_events();
+    window
+        .set_size(PhysicalSize::new(phys_w, phys_h))
+        .map_err(|e| e.to_string())?;
     window
         .set_position(PhysicalPosition::new(x, y))
-        .map_err(|e| e.to_string())
+        .map_err(|e| e.to_string())?;
+    manager.suppress_move_events();
+
+    Ok(())
 }
 
 pub fn emit_state(app: &AppHandle, state: &DockState) {
     let _ = app.emit("dock://state-changed", state);
 }
 
-pub fn show_and_focus(app: &AppHandle) {
+pub fn show_window(app: &AppHandle, focus: bool) {
     if let Some(window) = app.get_webview_window(MAIN_WINDOW_LABEL) {
         let _ = window.show();
         let _ = window.unminimize();
-        let _ = window.set_focus();
+        if focus {
+            let _ = window.set_focus();
+        }
         let state = app.state::<DockManager>().set_visible(true);
         emit_state(app, &state);
     }
@@ -164,57 +263,132 @@ pub fn hide_window(app: &AppHandle) {
     }
 }
 
+pub fn apply_edge(app: &AppHandle, edge: DockEdge) -> Result<DockState, String> {
+    let window = app
+        .get_webview_window(MAIN_WINDOW_LABEL)
+        .ok_or_else(|| "Janela principal não encontrada".to_string())?;
+    let manager = app.state::<DockManager>();
+    let state = manager.set_edge(edge);
+    apply_window_geometry(&window, &manager, state.edge, state.expanded)?;
+    emit_state(app, &state);
+    Ok(state)
+}
+
+pub fn apply_expanded(app: &AppHandle, expanded: bool) -> Result<DockState, String> {
+    let window = app
+        .get_webview_window(MAIN_WINDOW_LABEL)
+        .ok_or_else(|| "Janela principal não encontrada".to_string())?;
+    let manager = app.state::<DockManager>();
+    let state = manager.set_expanded(expanded);
+    apply_window_geometry(&window, &manager, state.edge, state.expanded)?;
+    if expanded {
+        let _ = window.show();
+        let _ = window.unminimize();
+        let _ = window.set_focus();
+    }
+    emit_state(app, &state);
+    Ok(state)
+}
+
+pub fn toggle_expanded(app: &AppHandle) -> Result<DockState, String> {
+    let current = app.state::<DockManager>().snapshot();
+    if !current.visible {
+        show_window(app, true);
+        return apply_expanded(app, true);
+    }
+    apply_expanded(app, !current.expanded)
+}
+
 pub fn toggle_visibility(app: &AppHandle) {
     if let Some(window) = app.get_webview_window(MAIN_WINDOW_LABEL) {
-        let visible = window.is_visible().unwrap_or(false);
-        let focused = window.is_focused().unwrap_or(false);
-        if visible && focused {
+        let is_visible = window.is_visible().unwrap_or(false);
+        if is_visible {
             hide_window(app);
         } else {
-            show_and_focus(app);
+            show_window(app, true);
         }
     }
 }
 
 pub fn open_for_new_note(app: &AppHandle) {
-    show_and_focus(app);
+    show_window(app, true);
+    let _ = apply_expanded(app, true);
     let _ = app.emit("dock://new-note", ());
 }
 
-pub fn apply_anchor(app: &AppHandle, anchor: DockAnchor) -> Result<DockState, String> {
-    let window = app
-        .get_webview_window(MAIN_WINDOW_LABEL)
-        .ok_or_else(|| "Janela principal não encontrada".to_string())?;
-    snap_window(&window, anchor)?;
-    let state = app.state::<DockManager>().set_anchor(anchor);
-    emit_state(app, &state);
-    Ok(state)
+pub fn handle_window_moved(app: &AppHandle) {
+    let manager = app.state::<DockManager>();
+    if manager.is_ignoring_moves() {
+        return;
+    }
+
+    let seq = manager.bump_move_seq();
+    let app_handle = app.clone();
+
+    std::thread::spawn(move || {
+        std::thread::sleep(Duration::from_millis(DRAG_SNAP_DEBOUNCE_MS));
+        let manager = app_handle.state::<DockManager>();
+        if manager.current_move_seq() != seq || manager.is_ignoring_moves() {
+            return;
+        }
+
+        let Some(window) = app_handle.get_webview_window(MAIN_WINDOW_LABEL) else {
+            return;
+        };
+        let Ok(Some(monitor)) = window
+            .current_monitor()
+            .or_else(|_| window.primary_monitor())
+        else {
+            return;
+        };
+        let (Ok(win_pos), Ok(win_size)) = (window.outer_position(), window.outer_size()) else {
+            return;
+        };
+
+        let monitor_pos = monitor.position();
+        let monitor_size = monitor.size();
+        let nearest = compute_nearest_edge(
+            monitor_pos.x,
+            monitor_pos.y,
+            monitor_size.width,
+            monitor_size.height,
+            win_pos.x,
+            win_pos.y,
+            win_size.width,
+            win_size.height,
+        );
+
+        let _ = apply_edge(&app_handle, nearest);
+    });
 }
 
 pub fn setup_tray(app: &AppHandle) -> tauri::Result<()> {
-    let toggle_item = MenuItem::with_id(app, "toggle", "Mostrar / Ocultar (Alt+Space)", true, None::<&str>)?;
-    let new_note_item = MenuItem::with_id(app, "new-note", "Nova nota (Ctrl+Shift+N)", true, None::<&str>)?;
+    let toggle_expand =
+        MenuItem::with_id(app, "toggle-expand", "Expandir / Recolher (Alt+Space)", true, None::<&str>)?;
+    let new_note_item =
+        MenuItem::with_id(app, "new-note", "Nova nota (Ctrl+Shift+N)", true, None::<&str>)?;
     let sep1 = PredefinedMenuItem::separator(app)?;
-    let snap_tr = MenuItem::with_id(app, "anchor:top-right", "Ancorar: Topo direito", true, None::<&str>)?;
-    let snap_tc = MenuItem::with_id(app, "anchor:top-center", "Ancorar: Topo centro", true, None::<&str>)?;
-    let snap_tl = MenuItem::with_id(app, "anchor:top-left", "Ancorar: Topo esquerdo", true, None::<&str>)?;
-    let snap_br = MenuItem::with_id(app, "anchor:bottom-right", "Ancorar: Base direita", true, None::<&str>)?;
-    let snap_bl = MenuItem::with_id(app, "anchor:bottom-left", "Ancorar: Base esquerda", true, None::<&str>)?;
+    let edge_right =
+        MenuItem::with_id(app, "edge:right", "Posição: Direita", true, None::<&str>)?;
+    let edge_left =
+        MenuItem::with_id(app, "edge:left", "Posição: Esquerda", true, None::<&str>)?;
+    let edge_top = MenuItem::with_id(app, "edge:top", "Posição: Topo", true, None::<&str>)?;
     let sep2 = PredefinedMenuItem::separator(app)?;
+    let toggle_vis =
+        MenuItem::with_id(app, "toggle-visible", "Mostrar / Ocultar da tela", true, None::<&str>)?;
     let quit_item = MenuItem::with_id(app, "quit", "Sair", true, None::<&str>)?;
 
     let menu = Menu::with_items(
         app,
         &[
-            &toggle_item,
+            &toggle_expand,
             &new_note_item,
             &sep1,
-            &snap_tr,
-            &snap_tc,
-            &snap_tl,
-            &snap_br,
-            &snap_bl,
+            &edge_right,
+            &edge_left,
+            &edge_top,
             &sep2,
+            &toggle_vis,
             &quit_item,
         ],
     )?;
@@ -224,28 +398,23 @@ pub fn setup_tray(app: &AppHandle) -> tauri::Result<()> {
         .tooltip("QuickNote CRM — Dock CS")
         .show_menu_on_left_click(false)
         .on_menu_event(|app, event| match event.id.as_ref() {
-            "toggle" => toggle_visibility(app),
+            "toggle-expand" => {
+                let _ = toggle_expanded(app);
+            }
             "new-note" => open_for_new_note(app),
-            "anchor:top-right" => {
-                let _ = apply_anchor(app, DockAnchor::TopRight);
-                show_and_focus(app);
+            "edge:right" => {
+                show_window(app, false);
+                let _ = apply_edge(app, DockEdge::Right);
             }
-            "anchor:top-center" => {
-                let _ = apply_anchor(app, DockAnchor::TopCenter);
-                show_and_focus(app);
+            "edge:left" => {
+                show_window(app, false);
+                let _ = apply_edge(app, DockEdge::Left);
             }
-            "anchor:top-left" => {
-                let _ = apply_anchor(app, DockAnchor::TopLeft);
-                show_and_focus(app);
+            "edge:top" => {
+                show_window(app, false);
+                let _ = apply_edge(app, DockEdge::Top);
             }
-            "anchor:bottom-right" => {
-                let _ = apply_anchor(app, DockAnchor::BottomRight);
-                show_and_focus(app);
-            }
-            "anchor:bottom-left" => {
-                let _ = apply_anchor(app, DockAnchor::BottomLeft);
-                show_and_focus(app);
-            }
+            "toggle-visible" => toggle_visibility(app),
             "quit" => app.exit(0),
             _ => {}
         })
@@ -256,7 +425,7 @@ pub fn setup_tray(app: &AppHandle) -> tauri::Result<()> {
                 ..
             } = event
             {
-                toggle_visibility(tray.app_handle());
+                let _ = toggle_expanded(tray.app_handle());
             }
         });
 
@@ -276,7 +445,7 @@ pub fn setup_global_shortcuts(app: &AppHandle) {
 
     if let Err(err) = gs.on_shortcut(toggle_shortcut, |app, _shortcut, event| {
         if event.state == ShortcutState::Pressed {
-            toggle_visibility(app);
+            let _ = toggle_expanded(app);
         }
     }) {
         eprintln!("[dock] Falha ao registrar Alt+Space: {err}");
@@ -296,34 +465,50 @@ mod tests {
     use super::*;
 
     #[test]
-    fn computes_all_five_anchors_on_1080p() {
+    fn computes_collapsed_and_expanded_rects_for_all_edges() {
         assert_eq!(
-            compute_anchor_position(0, 0, 1920, 1080, 360, 520, 1.0, DockAnchor::TopLeft),
-            (16, 16)
+            compute_dock_rect(0, 0, 1920, 1080, 1.0, DockEdge::Right, false),
+            (1864, 398, 56, 236)
         );
         assert_eq!(
-            compute_anchor_position(0, 0, 1920, 1080, 360, 520, 1.0, DockAnchor::TopCenter),
-            (780, 16)
+            compute_dock_rect(0, 0, 1920, 1080, 1.0, DockEdge::Left, false),
+            (0, 398, 56, 236)
         );
         assert_eq!(
-            compute_anchor_position(0, 0, 1920, 1080, 360, 520, 1.0, DockAnchor::TopRight),
-            (1544, 16)
+            compute_dock_rect(0, 0, 1920, 1080, 1.0, DockEdge::Top, false),
+            (842, 0, 236, 56)
         );
         assert_eq!(
-            compute_anchor_position(0, 0, 1920, 1080, 360, 520, 1.0, DockAnchor::BottomLeft),
-            (16, 508)
+            compute_dock_rect(0, 0, 1920, 1080, 1.0, DockEdge::Right, true),
+            (1516, 246, 404, 540)
         );
         assert_eq!(
-            compute_anchor_position(0, 0, 1920, 1080, 360, 520, 1.0, DockAnchor::BottomRight),
-            (1544, 508)
+            compute_dock_rect(0, 0, 1920, 1080, 1.0, DockEdge::Top, true),
+            (750, 0, 420, 500)
         );
     }
 
     #[test]
-    fn respects_secondary_monitor_offset_and_dpi_scale() {
+    fn respects_secondary_monitor_and_dpi_scale() {
         assert_eq!(
-            compute_anchor_position(1920, 0, 2560, 1440, 540, 780, 1.5, DockAnchor::TopRight),
-            (3916, 24)
+            compute_dock_rect(1920, 0, 2560, 1440, 1.5, DockEdge::Right, false),
+            (4396, 507, 84, 354)
+        );
+    }
+
+    #[test]
+    fn detects_nearest_edge_on_drag_release() {
+        assert_eq!(
+            compute_nearest_edge(0, 0, 1920, 1080, 40, 420, 56, 236),
+            DockEdge::Left
+        );
+        assert_eq!(
+            compute_nearest_edge(0, 0, 1920, 1080, 1790, 420, 56, 236),
+            DockEdge::Right
+        );
+        assert_eq!(
+            compute_nearest_edge(0, 0, 1920, 1080, 880, 18, 236, 56),
+            DockEdge::Top
         );
     }
 }

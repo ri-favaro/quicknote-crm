@@ -1,7 +1,8 @@
 use tauri::{AppHandle, Manager, State};
 
 use crate::dock::{
-    apply_anchor, emit_state, hide_window, DockAnchor, DockManager, DockState, MAIN_WINDOW_LABEL,
+    apply_edge, apply_expanded, emit_state, hide_window, toggle_expanded, DockEdge, DockManager,
+    DockState, MAIN_WINDOW_LABEL,
 };
 
 #[tauri::command]
@@ -10,8 +11,18 @@ pub fn get_dock_state(manager: State<'_, DockManager>) -> DockState {
 }
 
 #[tauri::command]
-pub fn snap_dock(app: AppHandle, anchor: DockAnchor) -> Result<DockState, String> {
-    apply_anchor(&app, anchor)
+pub fn set_dock_edge(app: AppHandle, edge: DockEdge) -> Result<DockState, String> {
+    apply_edge(&app, edge)
+}
+
+#[tauri::command]
+pub fn set_dock_expanded(app: AppHandle, expanded: bool) -> Result<DockState, String> {
+    apply_expanded(&app, expanded)
+}
+
+#[tauri::command]
+pub fn toggle_dock_expanded(app: AppHandle) -> Result<DockState, String> {
+    toggle_expanded(&app)
 }
 
 #[tauri::command]

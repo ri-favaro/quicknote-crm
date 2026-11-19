@@ -14,12 +14,12 @@
       {
         "label": "main",
         "title": "QuickNote CRM",
-        "width": 360,
-        "height": 520,
-        "minWidth": 320,
-        "minHeight": 400,
-        "resizable": true,
+        "width": 56,
+        "height": 236,
+        "resizable": false,
         "decorations": false,
+        "transparent": true,
+        "shadow": false,
         "alwaysOnTop": true,
         "skipTaskbar": true,
         "visible": true

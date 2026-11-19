@@ -1,12 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 
-export type DockAnchor =
-  | "top-left"
-  | "top-center"
-  | "top-right"
-  | "bottom-left"
-  | "bottom-right";
+export type DockEdge = "right" | "left" | "top";
 
 export interface DockShortcuts {
   toggle: string;
@@ -14,7 +9,8 @@ export interface DockShortcuts {
 }
 
 export interface DockState {
-  anchor: DockAnchor;
+  edge: DockEdge;
+  expanded: boolean;
   alwaysOnTop: boolean;
   visible: boolean;
   shortcuts: DockShortcuts;
@@ -39,7 +35,8 @@ export interface DispatchResult {
 }
 
 const DEFAULT_DOCK_STATE: DockState = {
-  anchor: "top-right",
+  edge: "right",
+  expanded: false,
   alwaysOnTop: true,
   visible: true,
   shortcuts: {
@@ -59,11 +56,25 @@ export async function getDockState(): Promise<DockState> {
   return invoke<DockState>("get_dock_state");
 }
 
-export async function snapDock(anchor: DockAnchor): Promise<DockState> {
+export async function setDockEdge(edge: DockEdge): Promise<DockState> {
   if (!isTauriRuntime()) {
-    return { ...DEFAULT_DOCK_STATE, anchor };
+    return { ...DEFAULT_DOCK_STATE, edge };
   }
-  return invoke<DockState>("snap_dock", { anchor });
+  return invoke<DockState>("set_dock_edge", { edge });
+}
+
+export async function setDockExpanded(expanded: boolean): Promise<DockState> {
+  if (!isTauriRuntime()) {
+    return { ...DEFAULT_DOCK_STATE, expanded };
+  }
+  return invoke<DockState>("set_dock_expanded", { expanded });
+}
+
+export async function toggleDockExpanded(): Promise<DockState> {
+  if (!isTauriRuntime()) {
+    return { ...DEFAULT_DOCK_STATE, expanded: !DEFAULT_DOCK_STATE.expanded };
+  }
+  return invoke<DockState>("toggle_dock_expanded");
 }
 
 export async function setAlwaysOnTop(enabled: boolean): Promise<DockState> {
