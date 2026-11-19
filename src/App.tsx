@@ -25,6 +25,27 @@ const INITIAL_STATE: DockState = {
   },
 };
 
+export const DOCK_OPACITY_STORAGE_KEY = "quicknote:dock-opacity";
+const DEFAULT_DOCK_OPACITY = 100;
+const MIN_DOCK_OPACITY = 40;
+const MAX_DOCK_OPACITY = 100;
+
+function clampDockOpacity(value: number): number {
+  if (!Number.isFinite(value)) return DEFAULT_DOCK_OPACITY;
+  return Math.min(MAX_DOCK_OPACITY, Math.max(MIN_DOCK_OPACITY, Math.round(value)));
+}
+
+function loadDockOpacity(): number {
+  try {
+    const raw = window.localStorage.getItem(DOCK_OPACITY_STORAGE_KEY);
+    if (raw === null) return DEFAULT_DOCK_OPACITY;
+    const parsed = Number(raw);
+    return Number.isFinite(parsed) ? clampDockOpacity(parsed) : DEFAULT_DOCK_OPACITY;
+  } catch {
+    return DEFAULT_DOCK_OPACITY;
+  }
+}
+
 function createNote(): SessionNote {
   return {
     id: crypto.randomUUID(),
@@ -42,6 +63,7 @@ export default function App() {
   const [todos, setTodos] = useState<SessionTodo[]>([]);
   const [todoDraft, setTodoDraft] = useState("");
   const [statusNotice, setStatusNotice] = useState<string | null>(null);
+  const [dockOpacity, setDockOpacity] = useState<number>(loadDockOpacity);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
   const noteBodyRef = useRef<HTMLTextAreaElement>(null);
   const stateVersionRef = useRef(0);
@@ -93,6 +115,16 @@ export default function App() {
   const handleHide = useCallback(async () => {
     setContextMenu(null);
     await hideDock();
+  }, []);
+
+  const handleOpacityChange = useCallback((nextOpacity: number) => {
+    const clamped = clampDockOpacity(nextOpacity);
+    setDockOpacity(clamped);
+    try {
+      window.localStorage.setItem(DOCK_OPACITY_STORAGE_KEY, String(clamped));
+    } catch {
+      // Ignora falhas de armazenamento local em ambientes restritos
+    }
   }, []);
 
   const handleNewNote = useCallback(async () => {
@@ -266,9 +298,11 @@ export default function App() {
       todos={todos}
       todoDraft={todoDraft}
       statusNotice={statusNotice}
+      dockOpacity={dockOpacity}
       noteBodyRef={noteBodyRef}
       onSelectEdge={handleSelectEdge}
       onTogglePin={handleTogglePin}
+      onOpacityChange={handleOpacityChange}
       onCollapse={() => void handleExpand(false)}
       onHide={() => void handleHide()}
       onSelectNote={setActiveNoteId}
@@ -283,7 +317,8 @@ export default function App() {
 
   const shell = (
     <div
-      className={`relative flex h-full w-full overflow-hidden border-white/[0.08] bg-[#121316]/95 ${edgeShellClass}`}
+      style={{ opacity: dockOpacity / 100 }}
+      className={`relative flex h-full w-full overflow-hidden border-white/[0.08] bg-[#121316] ${edgeShellClass}`}
     >
       {dock.edge === "right" ? (
         <>

@@ -1,5 +1,5 @@
 import { createRef } from "react";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import type { DockState } from "../lib/bridge";
@@ -31,9 +31,11 @@ function renderPanel(overrides: Partial<Parameters<typeof DockPanel>[0]> = {}) {
     todos: [] as SessionTodo[],
     todoDraft: "",
     statusNotice: null,
+    dockOpacity: 100,
     noteBodyRef: createRef<HTMLTextAreaElement>(),
     onSelectEdge: vi.fn(),
     onTogglePin: vi.fn(),
+    onOpacityChange: vi.fn(),
     onCollapse: vi.fn(),
     onHide: vi.fn(),
     onSelectNote: vi.fn(),
@@ -120,12 +122,21 @@ describe("DockPanel", () => {
     expect(props.onRemoveTodo).toHaveBeenCalledWith("t2");
   });
 
-  it("exibe opções de posição, atalhos e ocultar para bandeja na aba de ajustes", async () => {
+  it("exibe opções de posição, slider de opacidade, atalhos e ocultar para bandeja na aba de ajustes", async () => {
     const user = userEvent.setup();
-    const { props } = renderPanel({ activeTab: "settings" });
+    const { props } = renderPanel({ activeTab: "settings", dockOpacity: 85 });
 
     expect(screen.getByText("Alt+Space")).toBeInTheDocument();
     expect(screen.getByText("Ctrl+Shift+N")).toBeInTheDocument();
+    expect(screen.getByText("85%")).toBeInTheDocument();
+
+    const opacitySlider = screen.getByRole("slider", { name: "Opacidade do dock" });
+    expect(opacitySlider).toHaveAttribute("min", "40");
+    expect(opacitySlider).toHaveAttribute("max", "100");
+    expect(opacitySlider).toHaveValue("85");
+
+    fireEvent.change(opacitySlider, { target: { value: "65" } });
+    expect(props.onOpacityChange).toHaveBeenCalledWith(65);
 
     await user.click(screen.getByRole("button", { name: "Esquerda" }));
     expect(props.onSelectEdge).toHaveBeenCalledWith("left");
