@@ -1,5 +1,43 @@
 @import "tailwindcss";
 
+:root {
+  --background: hsl(222 20% 8%);
+  --popover: hsl(222 20% 11%);
+  --card: hsl(240 5% 21%);
+  --secondary: hsl(222 15% 15%);
+  --muted: hsl(222 15% 18%);
+  --border: hsl(222 15% 18%);
+  --input: hsl(222 15% 18%);
+  --muted-foreground: hsl(222 10% 55%);
+  --foreground: hsl(0 0% 95%);
+  --primary: hsl(270 78% 53%);
+  --primary-foreground: hsl(0 0% 98%);
+  --ring: hsl(270 78% 53%);
+  --accent: hsl(270 40% 20%);
+  --accent-foreground: hsl(270 60% 80%);
+  --destructive: hsl(0 84% 60%);
+  --destructive-foreground: hsl(0 0% 98%);
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-popover: var(--popover);
+  --color-card: var(--card);
+  --color-secondary: var(--secondary);
+  --color-muted: var(--muted);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-foreground: var(--foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-ring: var(--ring);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+}
+
 @layer base {
   html,
   body,
@@ -11,7 +49,7 @@
     overflow: hidden;
     background: transparent;
     background-color: transparent;
-    color: #f4f4f5;
+    color: var(--foreground);
     font-family: "Inter", "Segoe UI", system-ui, -apple-system, sans-serif;
     -webkit-font-smoothing: antialiased;
     user-select: none;
@@ -33,7 +71,7 @@
 
 * {
   scrollbar-width: thin;
-  scrollbar-color: rgba(255, 255, 255, 0.14) transparent;
+  scrollbar-color: color-mix(in srgb, var(--muted-foreground) 35%, transparent) transparent;
 }
 
 .dock-range::-webkit-slider-thumb {
@@ -42,23 +80,28 @@
   height: 14px;
   width: 14px;
   border-radius: 9999px;
-  background: #34d399;
-  border: 2px solid #121316;
-  box-shadow: 0 0 0 1px rgba(52, 211, 153, 0.35);
+  background: var(--primary);
+  border: 2px solid var(--background);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--ring) 45%, transparent);
   transition: transform 150ms ease, background-color 150ms ease;
 }
 
 .dock-range::-webkit-slider-thumb:hover {
   transform: scale(1.1);
-  background: #6ee7b7;
+  background: var(--accent-foreground);
 }
 
 .dock-range::-moz-range-thumb {
   height: 14px;
   width: 14px;
   border-radius: 9999px;
-  background: #34d399;
-  border: 2px solid #121316;
-  box-shadow: 0 0 0 1px rgba(52, 211, 153, 0.35);
+  background: var(--primary);
+  border: 2px solid var(--background);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--ring) 45%, transparent);
   transition: transform 150ms ease, background-color 150ms ease;
+}
+
+.dock-range::-moz-range-thumb:hover {
+  transform: scale(1.1);
+  background: var(--accent-foreground);
 }
