@@ -493,18 +493,15 @@ fn build_activity_payload(todo: &Todo, note: &Note, deal_id: i64) -> CreateActiv
 }
 
 fn normalize_pipedrive_due_date(raw: &str) -> Option<String> {
-    let trimmed = raw.trim();
-    if trimmed.len() >= 10 {
-        let prefix = &trimmed[..10];
-        let bytes = prefix.as_bytes();
-        if bytes[4] == b'-'
-            && bytes[7] == b'-'
-            && bytes[..4].iter().all(u8::is_ascii_digit)
-            && bytes[5..7].iter().all(u8::is_ascii_digit)
-            && bytes[8..10].iter().all(u8::is_ascii_digit)
-        {
-            return Some(prefix.to_string());
-        }
+    let bytes = raw.trim().as_bytes();
+    if bytes.len() >= 10
+        && bytes[4] == b'-'
+        && bytes[7] == b'-'
+        && bytes[..4].iter().all(u8::is_ascii_digit)
+        && bytes[5..7].iter().all(u8::is_ascii_digit)
+        && bytes[8..10].iter().all(u8::is_ascii_digit)
+    {
+        return std::str::from_utf8(&bytes[..10]).ok().map(str::to_string);
     }
     None
 }
@@ -732,6 +729,9 @@ mod tests {
             sanitize_secret("erro com token-xyz-999 aqui", "token-xyz-999"),
             "erro com [REDACTED] aqui"
         );
+        assert_eq!(normalize_pipedrive_due_date("2026-11-25"), Some("2026-11-25".to_string()));
+        assert_eq!(normalize_pipedrive_due_date("amanhã às 10h"), None);
+        assert_eq!(normalize_pipedrive_due_date("próximo mês"), None);
     }
 
     #[test]

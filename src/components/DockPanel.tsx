@@ -428,6 +428,7 @@ export function DockPanel({
 
             {onSelectPipedriveDeal && onSendToPipedrive && (
               <PipedriveBar
+                key={activeNote.id}
                 dealId={activeNote.pipedriveDealId}
                 linkedDeal={linkedDeal}
                 pendingActivityCount={pendingPipedriveActivityCount}
