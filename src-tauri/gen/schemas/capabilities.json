@@ -1,0 +1,1 @@
+{"default":{"identifier":"default","description":"Permissões padrão para o dock QuickNote CRM","local":true,"windows":["main"],"permissions":["core:default","core:window:allow-start-dragging","core:window:allow-hide","core:window:allow-show","core:window:allow-set-focus","global-shortcut:default"]}}

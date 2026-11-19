@@ -1,4 +1,4 @@
-﻿# Modelo de Dados e Contrato IPC
+# Modelo de Dados e Contrato IPC
 
 ## 1. Tabelas (SQLite Local & Supabase)
 
@@ -71,3 +71,16 @@ export interface DispatchResult {
 // triggerN8nWebhook(params: { noteId: string; webhookKey?: string }) -> Promise<DispatchResult>
 // syncSupabase() -> Promise<{ syncedNotes: number; syncedLogs: number }>
 ```
+
+---
+
+## 3. Comandos IPC Implementados (Marco 1 — Dock)
+
+| Comando / Evento | Direção | Descrição |
+| :--- | :--- | :--- |
+| get_dock_state | Frontend -> Rust | Retorna âncora ativa, estado lwaysOnTop, visibilidade e atalhos globais. |
+| snap_dock(anchor) | Frontend -> Rust | Ancora a janela em 	op-left, 	op-center, 	op-right, ottom-left ou ottom-right. |
+| set_always_on_top(enabled) | Frontend -> Rust | Alterna fixação da janela acima das demais. |
+| hide_dock | Frontend -> Rust | Recolhe a janela para a bandeja do sistema (*system tray*). |
+| dock://new-note | Rust -> Frontend | Evento emitido pelo atalho global Ctrl+Shift+N ou item da tray para focar nova nota. |
+| dock://state-changed | Rust -> Frontend | Sincroniza o estado do dock na UI quando alterado via tray ou comando. |
