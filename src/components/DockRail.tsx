@@ -27,10 +27,10 @@ export function DockRail({
 
   const dividerClass = expanded
     ? edge === "right"
-      ? "border-l border-white/[0.06]"
+      ? "border-l border-border"
       : edge === "left"
-        ? "border-r border-white/[0.06]"
-        : "border-b border-white/[0.06]"
+        ? "border-r border-border"
+        : "border-b border-border"
     : "";
 
   const indicatorPosition =
@@ -41,7 +41,7 @@ export function DockRail({
         : "top-0 left-1/2 -translate-x-1/2 w-5 h-[3px] rounded-b-full";
 
   const itemButtonBase =
-    "relative flex h-10 w-10 shrink-0 items-center justify-center rounded-[14px] transition-[background-color,color,transform] duration-150 active:scale-[0.95] cursor-pointer";
+    "relative flex h-10 w-10 shrink-0 items-center justify-center rounded-[14px] transition-[background-color,color,transform] duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring active:scale-[0.95] cursor-pointer";
 
   return (
     <nav
@@ -54,7 +54,7 @@ export function DockRail({
       <div
         data-tauri-drag-region
         title="Arraste para encaixar na direita, esquerda ou topo"
-        className={`flex items-center justify-center text-zinc-600 transition-colors duration-150 hover:text-zinc-400 cursor-grab active:cursor-grabbing ${
+        className={`flex items-center justify-center text-muted-foreground transition-colors duration-150 hover:text-foreground cursor-grab active:cursor-grabbing ${
           isTop ? "h-8 w-5 mr-0.5" : "h-5 w-8 mb-0.5"
         }`}
       >
@@ -73,12 +73,12 @@ export function DockRail({
         onClick={() => onSelectTab("notes")}
         className={`${itemButtonBase} ${
           expanded && activeTab === "notes"
-            ? "bg-white/[0.11] text-zinc-50"
-            : "text-zinc-400 hover:bg-white/[0.06] hover:text-zinc-100"
+            ? "bg-accent text-accent-foreground"
+            : "text-muted-foreground hover:bg-secondary hover:text-foreground"
         }`}
       >
         {expanded && activeTab === "notes" && (
-          <span className={`absolute bg-emerald-400 ${indicatorPosition}`} />
+          <span className={`absolute bg-primary ${indicatorPosition}`} />
         )}
         <FileText className="h-[18px] w-[18px]" strokeWidth={1.9} />
       </button>
@@ -91,16 +91,16 @@ export function DockRail({
         onClick={() => onSelectTab("todos")}
         className={`${itemButtonBase} ${
           expanded && activeTab === "todos"
-            ? "bg-white/[0.11] text-zinc-50"
-            : "text-zinc-400 hover:bg-white/[0.06] hover:text-zinc-100"
+            ? "bg-accent text-accent-foreground"
+            : "text-muted-foreground hover:bg-secondary hover:text-foreground"
         }`}
       >
         {expanded && activeTab === "todos" && (
-          <span className={`absolute bg-emerald-400 ${indicatorPosition}`} />
+          <span className={`absolute bg-primary ${indicatorPosition}`} />
         )}
         <CheckSquare className="h-[18px] w-[18px]" strokeWidth={1.9} />
         {pendingTodos > 0 && (
-          <span className="tabular-nums absolute right-1 top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-emerald-500 px-1 text-[10px] font-semibold leading-none text-zinc-950">
+          <span className="tabular-nums absolute right-1 top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[10px] font-semibold leading-none text-primary-foreground">
             {pendingTodos > 9 ? "9+" : pendingTodos}
           </span>
         )}
@@ -111,7 +111,7 @@ export function DockRail({
         title="Nova nota rápida (Ctrl+Shift+N)"
         aria-label="Nova nota rápida"
         onClick={onNewNote}
-        className={`${itemButtonBase} bg-white/[0.05] text-zinc-200 hover:bg-emerald-500/20 hover:text-emerald-300`}
+        className={`${itemButtonBase} bg-secondary text-foreground hover:bg-accent hover:text-accent-foreground`}
       >
         <Plus className="h-[19px] w-[19px]" strokeWidth={2.2} />
       </button>
@@ -124,12 +124,12 @@ export function DockRail({
         onClick={() => onSelectTab("settings")}
         className={`${itemButtonBase} ${
           expanded && activeTab === "settings"
-            ? "bg-white/[0.11] text-zinc-50"
-            : "text-zinc-500 hover:bg-white/[0.06] hover:text-zinc-200"
+            ? "bg-accent text-accent-foreground"
+            : "text-muted-foreground hover:bg-secondary hover:text-foreground"
         }`}
       >
         {expanded && activeTab === "settings" && (
-          <span className={`absolute bg-emerald-400 ${indicatorPosition}`} />
+          <span className={`absolute bg-primary ${indicatorPosition}`} />
         )}
         <SlidersHorizontal className="h-[17px] w-[17px]" strokeWidth={1.9} />
       </button>

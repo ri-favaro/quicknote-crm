@@ -112,7 +112,11 @@ describe("App (fluxos integrados do dock)", () => {
     expect(await screen.findByRole("heading", { name: "Posição e ajustes" })).toBeInTheDocument();
 
     fireEvent.contextMenu(rail);
-    expect(await screen.findByText("Posição do dock")).toBeInTheDocument();
+    const contextHeading = await screen.findByText("Posição do dock");
+    expect(contextHeading.parentElement).toHaveClass("bg-popover", "border-border");
+    expect(
+      within(contextHeading.parentElement!).getByRole("button", { name: "Direita" })
+    ).toHaveClass("bg-accent", "text-accent-foreground");
 
     await user.keyboard("{Escape}");
     await waitFor(() => {
@@ -264,6 +268,7 @@ describe("App (fluxos integrados do dock)", () => {
     expect(bodyMatch).not.toBeNull();
     const bodyClasses = bodyMatch?.[1].split(/\s+/) ?? [];
     expect(bodyClasses).toContain("bg-transparent");
+    expect(bodyClasses).toContain("text-foreground");
     expect(bodyClasses.some((cls) => /^bg-(zinc|black|slate|neutral|gray|stone)-?/.test(cls))).toBe(
       false
     );
@@ -285,7 +290,7 @@ describe("App (fluxos integrados do dock)", () => {
     const { container } = render(<App />);
     const shell = container.firstElementChild as HTMLElement | null;
     expect(shell).not.toBeNull();
-    expect(shell).toHaveClass("overflow-hidden", "rounded-l-[22px]", "bg-[#121316]");
+    expect(shell).toHaveClass("overflow-hidden", "rounded-l-[22px]", "bg-background");
     expect(shell).not.toHaveClass("bg-zinc-950");
     expect(shell?.style.opacity).toBe("1");
 

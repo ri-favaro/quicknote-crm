@@ -87,10 +87,10 @@ export function ProfileSettingsCard({
   };
 
   return (
-    <section className="rounded-[18px] border border-white/[0.07] bg-black/20 p-2.5">
+    <section className="rounded-[18px] border border-border bg-card p-2.5">
       <div className="mb-2 flex items-center justify-between gap-2 px-0.5">
-        <div className="flex items-center gap-1.5 text-[11px] font-medium text-zinc-300">
-          <User className="h-3.5 w-3.5 text-zinc-400" />
+        <div className="flex items-center gap-1.5 text-[11px] font-medium text-foreground">
+          <User className="h-3.5 w-3.5 text-foreground/75" />
           <span>Perfil CS ativo</span>
         </div>
         <span
@@ -109,7 +109,7 @@ export function ProfileSettingsCard({
           <div className="flex flex-col gap-1">
             <label
               htmlFor="cs-author-id"
-              className="px-0.5 text-[10px] text-zinc-400"
+              className="px-0.5 text-[10px] text-foreground/75"
             >
               ID do CS
             </label>
@@ -119,14 +119,14 @@ export function ProfileSettingsCard({
               value={authorId}
               onChange={(e) => setAuthorId(e.target.value)}
               placeholder="cs-01"
-              className="w-full rounded-[8px] border border-white/[0.07] bg-black/30 px-2.5 py-1.5 text-[12px] text-zinc-100 placeholder:text-zinc-600 focus:border-white/[0.18] focus:outline-none"
+              className="w-full rounded-[8px] border border-border bg-secondary px-2.5 py-1.5 text-[12px] text-foreground placeholder:text-foreground/50 focus:border-ring focus:ring-1 focus:ring-ring/40 focus:outline-none"
             />
           </div>
 
           <div className="flex flex-col gap-1">
             <label
               htmlFor="cs-author-name"
-              className="px-0.5 text-[10px] text-zinc-400"
+              className="px-0.5 text-[10px] text-foreground/75"
             >
               Nome exibido
             </label>
@@ -136,7 +136,7 @@ export function ProfileSettingsCard({
               value={authorName}
               onChange={(e) => setAuthorName(e.target.value)}
               placeholder="Ana Paula"
-              className="w-full rounded-[8px] border border-white/[0.07] bg-black/30 px-2.5 py-1.5 text-[12px] text-zinc-100 placeholder:text-zinc-600 focus:border-white/[0.18] focus:outline-none"
+              className="w-full rounded-[8px] border border-border bg-secondary px-2.5 py-1.5 text-[12px] text-foreground placeholder:text-foreground/50 focus:border-ring focus:ring-1 focus:ring-ring/40 focus:outline-none"
             />
           </div>
         </div>
@@ -145,7 +145,7 @@ export function ProfileSettingsCard({
           <div className="flex items-center justify-between px-0.5">
             <label
               htmlFor="cs-token"
-              className="text-[10px] text-zinc-400"
+              className="text-[10px] text-foreground/75"
             >
               Token CS (opcional)
             </label>
@@ -166,15 +166,17 @@ export function ProfileSettingsCard({
                 ? "Salvo no SQLite (digite para substituir)"
                 : "Token identificador opcional"
             }
-            className="w-full rounded-[8px] border border-white/[0.07] bg-black/30 px-2.5 py-1.5 text-[12px] text-zinc-100 placeholder:text-zinc-600 focus:border-white/[0.18] focus:outline-none"
+            className="w-full rounded-[8px] border border-border bg-secondary px-2.5 py-1.5 text-[12px] text-foreground placeholder:text-foreground/50 focus:border-ring focus:ring-1 focus:ring-ring/40 focus:outline-none"
           />
         </div>
 
         {feedback && (
           <p
-            className={`px-0.5 text-[11px] ${
-              feedback.kind === "error" ? "text-rose-300" : "text-emerald-300"
-            }`}
+            className={
+              feedback.kind === "error"
+                ? "rounded-md border border-destructive/40 bg-background/70 px-2 py-1 text-[11px] text-red-200"
+                : "px-0.5 text-[11px] text-emerald-300"
+            }
           >
             {feedback.text}
           </p>
@@ -184,7 +186,7 @@ export function ProfileSettingsCard({
           <button
             type="submit"
             disabled={saving}
-            className="flex flex-1 items-center justify-center gap-1.5 rounded-[8px] bg-emerald-500/15 px-3 py-1.5 text-[11px] font-medium text-emerald-200 transition-[background-color,color,transform] duration-150 hover:bg-emerald-500/25 active:scale-[0.96] disabled:opacity-50 cursor-pointer"
+            className="flex flex-1 items-center justify-center gap-1.5 rounded-[8px] bg-primary px-3 py-1.5 text-[11px] font-medium text-primary-foreground transition-[background-color,color,transform] duration-150 hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring active:scale-[0.96] disabled:opacity-50 cursor-pointer"
           >
             <Check className="h-3.5 w-3.5" />
             <span>{saving ? "Salvando..." : "Salvar perfil"}</span>
@@ -195,7 +197,7 @@ export function ProfileSettingsCard({
               type="button"
               disabled={saving}
               onClick={() => void handleClearToken()}
-              className="rounded-[8px] border border-white/[0.08] bg-white/[0.03] px-2.5 py-1.5 text-[11px] text-zinc-300 transition-[background-color,color,transform] duration-150 hover:bg-white/[0.08] hover:text-zinc-100 active:scale-[0.96] disabled:opacity-50 cursor-pointer"
+              className="rounded-[8px] border border-border bg-secondary px-2.5 py-1.5 text-[11px] text-foreground/85 transition-[background-color,color,transform] duration-150 hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring active:scale-[0.96] disabled:opacity-50 cursor-pointer"
             >
               Limpar token
             </button>

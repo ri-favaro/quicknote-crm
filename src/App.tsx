@@ -878,7 +878,7 @@ export default function App() {
   const shell = (
     <div
       style={{ opacity: dockOpacity / 100 }}
-      className={`relative flex h-full w-full overflow-hidden border-white/[0.08] bg-[#121316] transition-opacity duration-150 ${edgeShellClass}`}
+      className={`relative flex h-full w-full overflow-hidden border-border bg-background transition-opacity duration-150 ${edgeShellClass}`}
     >
       {dock.edge === "right" ? (
         <>
@@ -895,9 +895,9 @@ export default function App() {
       {contextMenu && (
         <div
           style={{ left: contextMenu.x, top: contextMenu.y }}
-          className="fixed z-50 w-42 rounded-[14px] border border-white/[0.1] bg-[#1b1c21] p-1.5 shadow-xl"
+          className="fixed z-50 w-42 rounded-[14px] border border-border bg-popover p-1.5 text-foreground shadow-xl"
         >
-          <div className="px-2 py-1 text-[10px] font-medium uppercase tracking-wider text-zinc-500">
+          <div className="px-2 py-1 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
             Posição do dock
           </div>
           {(["right", "left", "top"] as DockEdge[]).map((edge) => (
@@ -905,10 +905,10 @@ export default function App() {
               key={edge}
               type="button"
               onClick={() => void handleSelectEdge(edge)}
-              className={`flex w-full items-center justify-between rounded-lg px-2 py-1.5 text-left text-[12px] transition-colors cursor-pointer ${
+              className={`flex w-full items-center justify-between rounded-lg px-2 py-1.5 text-left text-[12px] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring cursor-pointer ${
                 dock.edge === edge
-                  ? "bg-emerald-500/15 text-emerald-300"
-                  : "text-zinc-200 hover:bg-white/[0.06]"
+                  ? "bg-accent text-accent-foreground"
+                  : "text-foreground/90 hover:bg-secondary hover:text-foreground"
               }`}
             >
               <span>
@@ -919,25 +919,25 @@ export default function App() {
                     : "Topo"}
               </span>
               {dock.edge === edge && (
-                <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
+                <span className="h-1.5 w-1.5 rounded-full bg-primary" />
               )}
             </button>
           ))}
-          <div className="my-1 border-t border-white/[0.07]" />
+          <div className="my-1 border-t border-border" />
           <button
             type="button"
             onClick={() => {
               setContextMenu(null);
               void handleExpand(false);
             }}
-            className="w-full rounded-lg px-2 py-1.5 text-left text-[12px] text-zinc-300 hover:bg-white/[0.06] cursor-pointer"
+            className="w-full rounded-lg px-2 py-1.5 text-left text-[12px] text-foreground/85 hover:bg-secondary hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring cursor-pointer"
           >
             Recolher barra
           </button>
           <button
             type="button"
             onClick={() => void handleHide()}
-            className="w-full rounded-lg px-2 py-1.5 text-left text-[12px] text-zinc-400 hover:bg-white/[0.06] hover:text-zinc-200 cursor-pointer"
+            className="w-full rounded-lg px-2 py-1.5 text-left text-[12px] text-muted-foreground hover:bg-secondary hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring cursor-pointer"
           >
             Ocultar para bandeja
           </button>
@@ -961,7 +961,7 @@ export default function App() {
             : "h-[236px] w-[56px] left-0 top-1/2 -translate-y-1/2";
 
     return (
-      <div className="relative h-screen w-screen bg-zinc-950">
+      <div className="relative h-screen w-screen bg-[#090B0F]">
         <div className={`fixed ${previewSize}`}>{shell}</div>
       </div>
     );
