@@ -413,7 +413,11 @@ export default function App() {
 
     void resetDockAppearance()
       .then((saved) => {
-        if (isMountedRef.current && appearanceVersionRef.current === version) {
+        if (
+          isMountedRef.current &&
+          appearanceVersionRef.current === version &&
+          isValidDockAppearance(saved)
+        ) {
           setAppearance(saved);
         }
       })

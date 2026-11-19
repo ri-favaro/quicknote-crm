@@ -18,6 +18,9 @@
   --accent-foreground: hsl(270 60% 80%);
   --destructive: hsl(0 84% 60%);
   --destructive-foreground: hsl(0 0% 98%);
+  --status-success-fg: hsl(152 72% 72%);
+  --status-warning-fg: hsl(42 92% 72%);
+  --status-danger-fg: hsl(0 90% 82%);
 }
 
 [data-theme="light"] {
@@ -37,6 +40,9 @@
   --accent-foreground: hsl(270 70% 34%);
   --destructive: hsl(0 72% 48%);
   --destructive-foreground: hsl(0 0% 98%);
+  --status-success-fg: hsl(156 76% 24%);
+  --status-warning-fg: hsl(32 88% 28%);
+  --status-danger-fg: hsl(0 72% 38%);
 }
 
 [data-theme="high-contrast"] {
@@ -56,6 +62,9 @@
   --accent-foreground: hsl(270 95% 88%);
   --destructive: hsl(0 90% 62%);
   --destructive-foreground: hsl(0 0% 100%);
+  --status-success-fg: hsl(152 100% 78%);
+  --status-warning-fg: hsl(46 100% 76%);
+  --status-danger-fg: hsl(0 100% 84%);
 }
 
 [data-accent="blue"] {
@@ -147,6 +156,9 @@
   --color-accent-foreground: var(--accent-foreground);
   --color-destructive: var(--destructive);
   --color-destructive-foreground: var(--destructive-foreground);
+  --color-status-success: var(--status-success-fg);
+  --color-status-warning: var(--status-warning-fg);
+  --color-status-danger: var(--status-danger-fg);
 }
 
 @layer base {

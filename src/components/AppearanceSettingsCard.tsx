@@ -103,7 +103,7 @@ export function AppearanceSettingsCard({
                   <span className="h-full w-1/2" style={{ backgroundColor: opt.bg }} />
                   <span className="h-full w-1/2" style={{ backgroundColor: opt.fg }} />
                 </span>
-                <span className="truncate">{opt.label}</span>
+                <span className="text-center leading-tight">{opt.label}</span>
               </button>
             );
           })}
@@ -112,7 +112,7 @@ export function AppearanceSettingsCard({
 
       <div className="flex flex-col gap-1.5 border-t border-border pt-2.5">
         <span className="text-[11px] text-foreground/80">Cor de destaque</span>
-        <div className="grid grid-cols-4 gap-1.5">
+        <div className="grid grid-cols-2 gap-1.5">
           {ACCENT_OPTIONS.map((opt) => {
             const active = appearance.accent === opt.id;
             return (

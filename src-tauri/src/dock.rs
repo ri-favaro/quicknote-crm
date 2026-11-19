@@ -94,8 +94,7 @@ impl DockManager {
 
     pub fn set_panel_size(&self, panel_size: DockPanelSize) -> DockPanelSize {
         let mut guard = self.panel_size.lock().expect("panel_size poisoned");
-        *guard = panel_size;
-        *guard
+        std::mem::replace(&mut *guard, panel_size)
     }
 
     pub fn snapshot(&self) -> DockState {
@@ -334,7 +333,10 @@ pub fn hide_window(app: &AppHandle) {
 
 pub fn apply_panel_size(app: &AppHandle, panel_size: DockPanelSize) -> Result<(), String> {
     let manager = app.state::<DockManager>();
-    manager.set_panel_size(panel_size);
+    let previous = manager.set_panel_size(panel_size);
+    if previous == panel_size {
+        return Ok(());
+    }
     let state = manager.snapshot();
     if state.expanded {
         if let Some(window) = app.get_webview_window(MAIN_WINDOW_LABEL) {
@@ -770,5 +772,15 @@ mod tests {
             compute_dock_rect(0, 0, 1920, 1080, 1.0, DockEdge::Right, false, DockPanelSize::Wide),
             (1864, 398, 56, 236)
         );
+    }
+
+    #[test]
+    fn dock_manager_set_panel_size_returns_previous_value() {
+        let manager = DockManager::new();
+        assert_eq!(manager.panel_size(), DockPanelSize::Default);
+        assert_eq!(manager.set_panel_size(DockPanelSize::Wide), DockPanelSize::Default);
+        assert_eq!(manager.set_panel_size(DockPanelSize::Wide), DockPanelSize::Wide);
+        assert_eq!(manager.set_panel_size(DockPanelSize::Compact), DockPanelSize::Wide);
+        assert_eq!(manager.panel_size(), DockPanelSize::Compact);
     }
 }
