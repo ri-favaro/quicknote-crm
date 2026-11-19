@@ -547,4 +547,96 @@ mod tests {
             DockEdge::Top
         );
     }
+
+    #[test]
+    fn dock_state_default_and_serde_contract() {
+        let state = DockState::default();
+        assert_eq!(state.edge, DockEdge::Right);
+        assert!(!state.expanded);
+        assert!(state.always_on_top);
+        assert!(state.visible);
+        assert_eq!(state.shortcuts.toggle, "Alt+Space");
+        assert_eq!(state.shortcuts.new_note, "Ctrl+Shift+N");
+
+        let json = serde_json::to_value(&state).expect("serialize DockState");
+        assert_eq!(json["edge"], "right");
+        assert_eq!(json["expanded"], false);
+        assert_eq!(json["alwaysOnTop"], true);
+        assert_eq!(json["visible"], true);
+        assert_eq!(json["shortcuts"]["toggle"], "Alt+Space");
+        assert_eq!(json["shortcuts"]["newNote"], "Ctrl+Shift+N");
+
+        for (raw, expected) in [
+            ("\"right\"", DockEdge::Right),
+            ("\"left\"", DockEdge::Left),
+            ("\"top\"", DockEdge::Top),
+        ] {
+            let parsed: DockEdge = serde_json::from_str(raw).expect("deserialize DockEdge");
+            assert_eq!(parsed, expected);
+        }
+    }
+
+    #[test]
+    fn dock_manager_state_transitions() {
+        let manager = DockManager::new();
+        assert_eq!(manager.snapshot().edge, DockEdge::Right);
+
+        let after_edge = manager.set_edge(DockEdge::Top);
+        assert_eq!(after_edge.edge, DockEdge::Top);
+        assert!(!after_edge.expanded);
+
+        let after_hide = manager.set_visible(false);
+        assert!(!after_hide.visible);
+
+        let after_expand = manager.set_expanded(true);
+        assert!(after_expand.expanded);
+        assert!(after_expand.visible);
+
+        let after_collapse = manager.set_expanded(false);
+        assert!(!after_collapse.expanded);
+        assert!(after_collapse.visible);
+
+        let after_unpin = manager.set_always_on_top(false);
+        assert!(!after_unpin.always_on_top);
+        assert_eq!(manager.snapshot().edge, DockEdge::Top);
+    }
+
+    #[test]
+    fn dock_manager_drag_debounce_and_move_suppression() {
+        let manager = DockManager::new();
+
+        assert!(manager.record_user_move());
+        assert!(!manager.record_user_move());
+        assert!(manager.remaining_debounce().is_some());
+
+        manager.clear_snap_scheduled();
+        assert!(manager.record_user_move());
+
+        manager.suppress_move_events();
+        assert!(manager.is_ignoring_moves());
+    }
+
+    #[test]
+    fn compute_dock_rect_clamps_height_on_small_monitor() {
+        let (x, y, w, h) = compute_dock_rect(0, 100, 1024, 480, 1.0, DockEdge::Right, true);
+        assert_eq!((w, h), (404, 540));
+        assert_eq!(x, 620);
+        assert_eq!(y, 100);
+    }
+
+    #[test]
+    fn compute_nearest_edge_handles_secondary_monitor() {
+        assert_eq!(
+            compute_nearest_edge(1920, 100, 2560, 1440, 1940, 700, 56, 236),
+            DockEdge::Left
+        );
+        assert_eq!(
+            compute_nearest_edge(1920, 100, 2560, 1440, 4400, 700, 56, 236),
+            DockEdge::Right
+        );
+        assert_eq!(
+            compute_nearest_edge(1920, 100, 2560, 1440, 3100, 110, 236, 56),
+            DockEdge::Top
+        );
+    }
 }

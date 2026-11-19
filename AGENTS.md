@@ -1,4 +1,4 @@
-﻿# AGENTS.md — QuickNote CRM (`quicknote-crm`)
+# AGENTS.md — QuickNote CRM (`quicknote-crm`)
 
 Guia operacional vivo para qualquer agente trabalhando neste repositório. Mantenha este arquivo e a pasta `docs/` atualizados sempre que decisões de arquitetura, contratos IPC, schema ou integrações mudarem.
 
