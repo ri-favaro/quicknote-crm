@@ -21,6 +21,10 @@
   textarea {
     user-select: text;
   }
+
+  input[type="date"] {
+    color-scheme: dark;
+  }
 }
 
 .tabular-nums {

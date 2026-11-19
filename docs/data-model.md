@@ -2,11 +2,13 @@
 
 ## 1. Tabelas (SQLite Local & Supabase)
 
+O backend Rust inicializa o arquivo `quicknote.db` em `app_data_dir` com `PRAGMA journal_mode = WAL`, `PRAGMA busy_timeout = 5000` e `PRAGMA foreign_keys = ON`.
+
 ### `notes`
 | Coluna | Tipo | Descrição |
 | :--- | :--- | :--- |
 | `id` | `TEXT (UUID)` | Identificador único da nota |
-| `author_id` | `TEXT` | Identificador do usuário CS (perfil local) |
+| `author_id` | `TEXT` | Identificador do usuário CS (perfil local ou fallback `local-cs`) |
 | `author_name` | `TEXT` | Nome exibido nos logs e envios |
 | `title` | `TEXT` | Título curto da reunião/nota |
 | `content_md` | `TEXT` | Corpo da nota em Markdown |
@@ -20,17 +22,17 @@
 | Coluna | Tipo | Descrição |
 | :--- | :--- | :--- |
 | `id` | `TEXT (UUID)` | Identificador único da tarefa |
-| `note_id` | `TEXT (FK -> notes.id)` | Nota de origem |
+| `note_id` | `TEXT (FK -> notes.id ON DELETE CASCADE)` | Nota de origem |
 | `text` | `TEXT` | Descrição do item |
-| `done` | `INTEGER (0/1)` | Estado de conclusão |
-| `due_date` | `TEXT (ISO-8601)` (nullable) | Prazo opcional para follow-up |
+| `done` | `INTEGER (0/1)` | Estado de conclusão (`CHECK (done IN (0, 1))`) |
+| `due_date` | `TEXT (ISO-8601)` (nullable) | Prazo opcional para follow-up (`YYYY-MM-DD` ou RFC3339) |
 | `pipedrive_activity_id` | `INTEGER` (nullable) | ID da atividade criada no Pipedrive |
 
 ### `integration_logs`
 | Coluna | Tipo | Descrição |
 | :--- | :--- | :--- |
 | `id` | `TEXT (UUID)` | Identificador do log |
-| `note_id` | `TEXT (FK -> notes.id)` | Nota relacionada |
+| `note_id` | `TEXT (FK -> notes.id ON DELETE CASCADE)` | Nota relacionada |
 | `author_id` | `TEXT` | Usuário CS que disparou a ação |
 | `target` | `TEXT` | `pipedrive` ou `n8n` |
 | `status` | `TEXT` | `pending`, `sent` ou `error` |
@@ -38,6 +40,15 @@
 | `response_status` | `INTEGER` (nullable) | Código HTTP retornado |
 | `error_message` | `TEXT` (nullable) | Mensagem de erro, quando houver |
 | `created_at` | `TEXT (ISO-8601)` | Momento da tentativa |
+
+### `cs_profile` (apenas SQLite local)
+| Coluna | Tipo | Descrição |
+| :--- | :--- | :--- |
+| `singleton` | `INTEGER (PK CHECK (singleton = 1))` | Garante registro único do perfil local ativo |
+| `author_id` | `TEXT` | Identificador do usuário CS |
+| `author_name` | `TEXT` | Nome exibido nas notas e futuros logs |
+| `token` | `TEXT` | Token identificador write-only (nunca retornado ao frontend) |
+| `updated_at` | `TEXT (ISO-8601)` | Última atualização do perfil |
 
 ---
 
@@ -47,7 +58,53 @@
 export interface ActiveProfile {
   authorId: string;
   authorName: string;
-  token: string;
+  hasToken: boolean;
+  isConfigured: boolean;
+}
+
+export interface SetActiveProfileInput {
+  authorId: string;
+  authorName: string;
+  token?: string;
+  clearToken?: boolean;
+}
+
+export interface Note {
+  id: string;
+  authorId: string;
+  authorName: string;
+  title: string;
+  contentMd: string;
+  pipedriveDealId: number | null;
+  pipedrivePersonId: number | null;
+  createdAt: string;
+  updatedAt: string;
+  syncedAt: string | null;
+}
+
+export interface SaveNoteDraftInput {
+  id?: string;
+  title: string;
+  contentMd: string;
+  pipedriveDealId?: number | null;
+  pipedrivePersonId?: number | null;
+}
+
+export interface Todo {
+  id: string;
+  noteId: string;
+  text: string;
+  done: boolean;
+  dueDate: string | null;
+  pipedriveActivityId: number | null;
+}
+
+export interface UpsertTodoInput {
+  id?: string;
+  noteId: string;
+  text: string;
+  done?: boolean;
+  dueDate?: string | null;
 }
 
 export interface DealSummary {
@@ -62,10 +119,7 @@ export interface DispatchResult {
   message: string;
 }
 
-// Comandos Tauri planejados
-// saveNoteDraft(note) -> Promise<Note>
-// listNotes() -> Promise<Note[]>
-// setActiveProfile(profile: ActiveProfile) -> Promise<void>
+// Comandos planejados (próximo marco de integrações)
 // searchPipedriveDeals(query: string) -> Promise<DealSummary[]>
 // sendToPipedrive(params: { noteId: string; type: "note" | "activity"; dealId: number }) -> Promise<DispatchResult>
 // triggerN8nWebhook(params: { noteId: string; webhookKey?: string }) -> Promise<DispatchResult>
@@ -74,8 +128,9 @@ export interface DispatchResult {
 
 ---
 
-## 3. Comandos IPC Implementados (Dock Minimalista)
+## 3. Comandos IPC Implementados
 
+### Dock Minimalista
 | Comando / Evento | Direção | Descrição |
 | :--- | :--- | :--- |
 | `get_dock_state` | Frontend -> Rust | Retorna borda ativa (`right`, `left`, `top`), estado `expanded`, `alwaysOnTop`, `visible` e atalhos globais. |
@@ -86,3 +141,17 @@ export interface DispatchResult {
 | `hide_dock` | Frontend -> Rust | Oculta completamente a janela para a bandeja do sistema (*system tray*). |
 | `dock://new-note` | Rust -> Frontend | Evento emitido pelo atalho global `Ctrl+Shift+N` ou item da tray para expandir e focar nova nota. |
 | `dock://state-changed` | Rust -> Frontend | Sincroniza o estado do dock na UI quando alterado via tray, atalho global ou drag-snap. |
+
+### Persistência Local SQLite e Perfil CS
+| Comando | Argumentos | Retorno / Comportamento |
+| :--- | :--- | :--- |
+| `save_note_draft` | `{ note: SaveNoteDraftInput }` | Faz upsert em `notes` (`ON CONFLICT DO UPDATE`), preserva `created_at` e `todos`, promove autor `local-cs` após configurar perfil e retorna `Note`. |
+| `list_notes` | — | Lista todas as notas ordenadas por `updated_at DESC, rowid DESC`. |
+| `get_note` | `{ id: string }` | Busca uma nota por ID (`Note | null`). |
+| `delete_note` | `{ id: string }` | Remove a nota e seus registros dependentes em `todos` / `integration_logs` via `ON DELETE CASCADE`. |
+| `list_todos` | `{ noteId: string | null }` | Lista tarefas da nota informada ou todas as tarefas quando `noteId` é `null`. |
+| `upsert_todo` | `{ todo: UpsertTodoInput }` | Valida `text`, `dueDate` e existência de `noteId`; cria ou atualiza registro em `todos`. |
+| `toggle_todo` | `{ id: string }` | Alterna `done` (`0`/`1`) no SQLite e retorna o `Todo` atualizado. |
+| `delete_todo` | `{ id: string }` | Remove a tarefa por ID. |
+| `set_active_profile` | `{ profile: SetActiveProfileInput }` | Salva `authorId`, `authorName` e opcionalmente atualiza ou limpa `token` no SQLite; retorna `ActiveProfile` sem o token bruto. |
+| `get_active_profile` | — | Retorna o perfil salvo (`isConfigured: true`) ou fallback (`local-cs` / `CS Local`, `isConfigured: false`) sem expor `token`. |
