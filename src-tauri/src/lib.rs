@@ -1,8 +1,10 @@
 mod commands;
+mod db;
 mod dock;
 
 use tauri::{Manager, WindowEvent};
 
+use crate::db::Database;
 use crate::dock::{DockEdge, DockManager, MAIN_WINDOW_LABEL};
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -12,6 +14,13 @@ pub fn run() {
         .manage(DockManager::new())
         .setup(|app| {
             let handle = app.handle();
+            let app_data_dir = app
+                .path()
+                .app_data_dir()
+                .map_err(|e| format!("Falha ao resolver app_data_dir: {e}"))?;
+            let database = Database::open(app_data_dir.join("quicknote.db"))?;
+            app.manage(database);
+
             dock::setup_tray(handle)?;
             dock::setup_global_shortcuts(handle);
 
@@ -45,6 +54,16 @@ pub fn run() {
             commands::toggle_dock_expanded,
             commands::set_always_on_top,
             commands::hide_dock,
+            commands::save_note_draft,
+            commands::list_notes,
+            commands::get_note,
+            commands::delete_note,
+            commands::list_todos,
+            commands::upsert_todo,
+            commands::toggle_todo,
+            commands::delete_todo,
+            commands::set_active_profile,
+            commands::get_active_profile,
         ])
         .run(tauri::generate_context!())
         .expect("erro ao executar QuickNote CRM");
