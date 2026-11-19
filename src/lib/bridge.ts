@@ -1,12 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 
-export type DockAnchor =
-  | "top-left"
-  | "top-center"
-  | "top-right"
-  | "bottom-left"
-  | "bottom-right";
+export type DockEdge = "right" | "left" | "top";
 
 export interface DockShortcuts {
   toggle: string;
@@ -14,7 +9,8 @@ export interface DockShortcuts {
 }
 
 export interface DockState {
-  anchor: DockAnchor;
+  edge: DockEdge;
+  expanded: boolean;
   alwaysOnTop: boolean;
   visible: boolean;
   shortcuts: DockShortcuts;
@@ -38,8 +34,9 @@ export interface DispatchResult {
   message: string;
 }
 
-const DEFAULT_DOCK_STATE: DockState = {
-  anchor: "top-right",
+let mockDockState: DockState = {
+  edge: "right",
+  expanded: false,
   alwaysOnTop: true,
   visible: true,
   shortcuts: {
@@ -54,27 +51,46 @@ export function isTauriRuntime(): boolean {
 
 export async function getDockState(): Promise<DockState> {
   if (!isTauriRuntime()) {
-    return DEFAULT_DOCK_STATE;
+    return { ...mockDockState };
   }
   return invoke<DockState>("get_dock_state");
 }
 
-export async function snapDock(anchor: DockAnchor): Promise<DockState> {
+export async function setDockEdge(edge: DockEdge): Promise<DockState> {
   if (!isTauriRuntime()) {
-    return { ...DEFAULT_DOCK_STATE, anchor };
+    mockDockState = { ...mockDockState, edge };
+    return { ...mockDockState };
   }
-  return invoke<DockState>("snap_dock", { anchor });
+  return invoke<DockState>("set_dock_edge", { edge });
+}
+
+export async function setDockExpanded(expanded: boolean): Promise<DockState> {
+  if (!isTauriRuntime()) {
+    mockDockState = { ...mockDockState, expanded, visible: expanded ? true : mockDockState.visible };
+    return { ...mockDockState };
+  }
+  return invoke<DockState>("set_dock_expanded", { expanded });
+}
+
+export async function toggleDockExpanded(): Promise<DockState> {
+  if (!isTauriRuntime()) {
+    mockDockState = { ...mockDockState, expanded: !mockDockState.expanded, visible: true };
+    return { ...mockDockState };
+  }
+  return invoke<DockState>("toggle_dock_expanded");
 }
 
 export async function setAlwaysOnTop(enabled: boolean): Promise<DockState> {
   if (!isTauriRuntime()) {
-    return { ...DEFAULT_DOCK_STATE, alwaysOnTop: enabled };
+    mockDockState = { ...mockDockState, alwaysOnTop: enabled };
+    return { ...mockDockState };
   }
   return invoke<DockState>("set_always_on_top", { enabled });
 }
 
 export async function hideDock(): Promise<void> {
   if (!isTauriRuntime()) {
+    mockDockState = { ...mockDockState, visible: false };
     return;
   }
   await invoke("hide_dock");

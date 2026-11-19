@@ -74,13 +74,15 @@ export interface DispatchResult {
 
 ---
 
-## 3. Comandos IPC Implementados (Marco 1 — Dock)
+## 3. Comandos IPC Implementados (Dock Minimalista)
 
 | Comando / Evento | Direção | Descrição |
 | :--- | :--- | :--- |
-| get_dock_state | Frontend -> Rust | Retorna âncora ativa, estado lwaysOnTop, visibilidade e atalhos globais. |
-| snap_dock(anchor) | Frontend -> Rust | Ancora a janela em 	op-left, 	op-center, 	op-right, ottom-left ou ottom-right. |
-| set_always_on_top(enabled) | Frontend -> Rust | Alterna fixação da janela acima das demais. |
-| hide_dock | Frontend -> Rust | Recolhe a janela para a bandeja do sistema (*system tray*). |
-| dock://new-note | Rust -> Frontend | Evento emitido pelo atalho global Ctrl+Shift+N ou item da tray para focar nova nota. |
-| dock://state-changed | Rust -> Frontend | Sincroniza o estado do dock na UI quando alterado via tray ou comando. |
+| `get_dock_state` | Frontend -> Rust | Retorna borda ativa (`right`, `left`, `top`), estado `expanded`, `alwaysOnTop`, `visible` e atalhos globais. |
+| `set_dock_edge(edge)` | Frontend -> Rust | Encaixa e redimensiona a janela na borda `right`, `left` ou `top` (também acionado automaticamente ao arrastar e soltar próximo a uma borda). |
+| `set_dock_expanded(expanded)` | Frontend -> Rust | Alterna explicitamente entre a barra minimalista recolhida e o painel expandido mantendo o encaixe na borda. |
+| `toggle_dock_expanded` | Frontend -> Rust | Alterna o estado recolhido/expandido (usado também pelo atalho `Alt+Space` e clique na bandeja). |
+| `set_always_on_top(enabled)` | Frontend -> Rust | Alterna fixação da janela acima das demais. |
+| `hide_dock` | Frontend -> Rust | Oculta completamente a janela para a bandeja do sistema (*system tray*). |
+| `dock://new-note` | Rust -> Frontend | Evento emitido pelo atalho global `Ctrl+Shift+N` ou item da tray para expandir e focar nova nota. |
+| `dock://state-changed` | Rust -> Frontend | Sincroniza o estado do dock na UI quando alterado via tray, atalho global ou drag-snap. |

@@ -5,13 +5,28 @@
   body,
   #root {
     height: 100%;
+    width: 100%;
     margin: 0;
     padding: 0;
+    overflow: hidden;
+    background: transparent;
+    color: #f4f4f5;
     font-family: "Inter", "Segoe UI", system-ui, -apple-system, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    user-select: none;
   }
+
+  input,
+  textarea {
+    user-select: text;
+  }
+}
+
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
 }
 
 * {
   scrollbar-width: thin;
-  scrollbar-color: #27272a transparent;
+  scrollbar-color: rgba(255, 255, 255, 0.14) transparent;
 }
