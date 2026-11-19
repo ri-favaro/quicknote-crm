@@ -44,13 +44,21 @@ export default function App() {
   const [statusNotice, setStatusNotice] = useState<string | null>(null);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
   const noteBodyRef = useRef<HTMLTextAreaElement>(null);
+  const stateVersionRef = useRef(0);
 
   const focusNoteBody = useCallback(() => {
-    setTimeout(() => noteBodyRef.current?.focus(), 40);
+    setTimeout(() => {
+      const active = document.activeElement;
+      if (active instanceof HTMLInputElement || active instanceof HTMLTextAreaElement) {
+        return;
+      }
+      noteBodyRef.current?.focus();
+    }, 40);
   }, []);
 
   const handleExpand = useCallback(async (expanded: boolean) => {
     try {
+      stateVersionRef.current += 1;
       const next = await setDockExpanded(expanded);
       setDock(next);
       setStatusNotice(null);
@@ -62,6 +70,7 @@ export default function App() {
   const handleSelectEdge = useCallback(async (edge: DockEdge) => {
     setContextMenu(null);
     try {
+      stateVersionRef.current += 1;
       const next = await setDockEdge(edge);
       setDock(next);
       setStatusNotice(null);
@@ -72,6 +81,7 @@ export default function App() {
 
   const handleTogglePin = useCallback(async () => {
     try {
+      stateVersionRef.current += 1;
       const next = await setAlwaysOnTop(!dock.alwaysOnTop);
       setDock(next);
       setStatusNotice(null);
@@ -137,9 +147,10 @@ export default function App() {
 
   useEffect(() => {
     let active = true;
+    const initialVersion = stateVersionRef.current;
     getDockState()
       .then((state) => {
-        if (active) setDock(state);
+        if (active && stateVersionRef.current === initialVersion) setDock(state);
       })
       .catch(() => {});
 
@@ -157,7 +168,9 @@ export default function App() {
     });
 
     onDockStateChanged((state) => {
-      if (active) setDock(state);
+      if (!active) return;
+      stateVersionRef.current += 1;
+      setDock(state);
     }).then((fn) => {
       if (!active) {
         fn();

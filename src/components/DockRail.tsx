@@ -45,7 +45,7 @@ export function DockRail({
 
   return (
     <nav
-      aria-label="Barra rápida QuickNote"
+      aria-label="Barra rápida QuickNote" data-orientation={isTop ? "horizontal" : "vertical"}
       onContextMenu={onContextMenu}
       className={`flex shrink-0 items-center justify-center gap-1.5 bg-[#121316]/95 ${dividerClass} ${
         isTop ? "h-14 w-full flex-row px-2.5" : "h-full w-14 flex-col py-2.5"

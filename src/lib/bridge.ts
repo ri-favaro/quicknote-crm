@@ -74,7 +74,7 @@ export async function setDockExpanded(expanded: boolean): Promise<DockState> {
 
 export async function toggleDockExpanded(): Promise<DockState> {
   if (!isTauriRuntime()) {
-    mockDockState = { ...mockDockState, expanded: !mockDockState.expanded, visible: true };
+    mockDockState = { ...mockDockState, expanded: !mockDockState.visible ? true : !mockDockState.expanded, visible: true };
     return { ...mockDockState };
   }
   return invoke<DockState>("toggle_dock_expanded");

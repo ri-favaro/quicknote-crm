@@ -113,25 +113,37 @@ impl DockManager {
     }
 
     fn suppress_move_events(&self) {
+        self.suppress_move_events_at(Instant::now());
+    }
+
+    fn suppress_move_events_at(&self, now: Instant) {
         let mut guard = self
             .ignore_moves_until
             .lock()
             .expect("ignore_moves_until poisoned");
-        *guard = Instant::now() + Duration::from_millis(PROGRAMMATIC_MOVE_GUARD_MS);
+        *guard = now + Duration::from_millis(PROGRAMMATIC_MOVE_GUARD_MS);
     }
 
     fn is_ignoring_moves(&self) -> bool {
+        self.is_ignoring_moves_at(Instant::now())
+    }
+
+    fn is_ignoring_moves_at(&self, now: Instant) -> bool {
         let guard = self
             .ignore_moves_until
             .lock()
             .expect("ignore_moves_until poisoned");
-        Instant::now() < *guard
+        now < *guard
     }
 
     fn record_user_move(&self) -> bool {
+        self.record_user_move_at(Instant::now())
+    }
+
+    fn record_user_move_at(&self, now: Instant) -> bool {
         {
             let mut guard = self.last_move_at.lock().expect("last_move_at poisoned");
-            *guard = Instant::now();
+            *guard = now;
         }
         self.snap_scheduled
             .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
@@ -139,9 +151,13 @@ impl DockManager {
     }
 
     fn remaining_debounce(&self) -> Option<Duration> {
+        self.remaining_debounce_at(Instant::now())
+    }
+
+    fn remaining_debounce_at(&self, now: Instant) -> Option<Duration> {
         let last = *self.last_move_at.lock().expect("last_move_at poisoned");
         let target = last + Duration::from_millis(DRAG_SNAP_DEBOUNCE_MS);
-        target.checked_duration_since(Instant::now())
+        target.checked_duration_since(now)
     }
 
     fn clear_snap_scheduled(&self) {
@@ -519,6 +535,10 @@ mod tests {
             (1516, 246, 404, 540)
         );
         assert_eq!(
+            compute_dock_rect(0, 0, 1920, 1080, 1.0, DockEdge::Left, true),
+            (0, 246, 404, 540)
+        );
+        assert_eq!(
             compute_dock_rect(0, 0, 1920, 1080, 1.0, DockEdge::Top, true),
             (750, 0, 420, 500)
         );
@@ -545,6 +565,117 @@ mod tests {
         assert_eq!(
             compute_nearest_edge(0, 0, 1920, 1080, 880, 18, 236, 56),
             DockEdge::Top
+        );
+    }
+
+    #[test]
+    fn dock_state_default_and_serde_contract() {
+        let state = DockState::default();
+        assert_eq!(state.edge, DockEdge::Right);
+        assert!(!state.expanded);
+        assert!(state.always_on_top);
+        assert!(state.visible);
+        assert_eq!(state.shortcuts.toggle, "Alt+Space");
+        assert_eq!(state.shortcuts.new_note, "Ctrl+Shift+N");
+
+        let json = serde_json::to_value(&state).expect("serialize DockState");
+        assert_eq!(json["edge"], "right");
+        assert_eq!(json["expanded"], false);
+        assert_eq!(json["alwaysOnTop"], true);
+        assert_eq!(json["visible"], true);
+        assert_eq!(json["shortcuts"]["toggle"], "Alt+Space");
+        assert_eq!(json["shortcuts"]["newNote"], "Ctrl+Shift+N");
+
+        for (raw, expected) in [
+            ("\"right\"", DockEdge::Right),
+            ("\"left\"", DockEdge::Left),
+            ("\"top\"", DockEdge::Top),
+        ] {
+            let parsed: DockEdge = serde_json::from_str(raw).expect("deserialize DockEdge");
+            assert_eq!(parsed, expected);
+        }
+
+        assert!(serde_json::from_str::<DockEdge>("\"bottom\"").is_err());
+    }
+
+    #[test]
+    fn dock_manager_state_transitions() {
+        let manager = DockManager::new();
+        assert_eq!(manager.snapshot().edge, DockEdge::Right);
+
+        let after_edge = manager.set_edge(DockEdge::Top);
+        assert_eq!(after_edge.edge, DockEdge::Top);
+        assert!(!after_edge.expanded);
+
+        let after_hide = manager.set_visible(false);
+        assert!(!after_hide.visible);
+
+        let after_expand = manager.set_expanded(true);
+        assert!(after_expand.expanded);
+        assert!(after_expand.visible);
+
+        let after_collapse = manager.set_expanded(false);
+        assert!(!after_collapse.expanded);
+        assert!(after_collapse.visible);
+
+        let after_unpin = manager.set_always_on_top(false);
+        assert!(!after_unpin.always_on_top);
+        assert_eq!(manager.snapshot().edge, DockEdge::Top);
+    }
+
+    #[test]
+    fn dock_manager_drag_debounce_and_move_suppression_expire_deterministically() {
+        let manager = DockManager::new();
+        let t0 = Instant::now();
+
+        assert!(manager.record_user_move_at(t0));
+        assert!(!manager.record_user_move_at(t0 + Duration::from_millis(50)));
+        assert!(manager
+            .remaining_debounce_at(t0 + Duration::from_millis(100))
+            .is_some());
+        assert!(manager
+            .remaining_debounce_at(t0 + Duration::from_millis(50 + DRAG_SNAP_DEBOUNCE_MS + 1))
+            .is_none());
+
+        manager.clear_snap_scheduled();
+        assert!(manager.record_user_move_at(t0 + Duration::from_millis(400)));
+
+        manager.suppress_move_events_at(t0);
+        assert!(manager.is_ignoring_moves_at(t0 + Duration::from_millis(100)));
+        assert!(!manager.is_ignoring_moves_at(
+            t0 + Duration::from_millis(PROGRAMMATIC_MOVE_GUARD_MS + 1)
+        ));
+    }
+
+    #[test]
+    fn clamps_y_origin_when_panel_exceeds_monitor_height() {
+        let (x, y, w, h) = compute_dock_rect(0, 100, 1024, 480, 1.0, DockEdge::Right, true);
+        assert_eq!((w, h), (404, 540));
+        assert_eq!(x, 620);
+        assert_eq!(y, 100);
+    }
+
+    #[test]
+    fn compute_nearest_edge_handles_secondary_and_negative_x_monitors() {
+        assert_eq!(
+            compute_nearest_edge(1920, 100, 2560, 1440, 1940, 700, 56, 236),
+            DockEdge::Left
+        );
+        assert_eq!(
+            compute_nearest_edge(1920, 100, 2560, 1440, 4400, 700, 56, 236),
+            DockEdge::Right
+        );
+        assert_eq!(
+            compute_nearest_edge(1920, 100, 2560, 1440, 3100, 110, 236, 56),
+            DockEdge::Top
+        );
+        assert_eq!(
+            compute_nearest_edge(-1920, 0, 1920, 1080, -1890, 420, 56, 236),
+            DockEdge::Left
+        );
+        assert_eq!(
+            compute_nearest_edge(-1920, 0, 1920, 1080, -90, 420, 56, 236),
+            DockEdge::Right
         );
     }
 }
