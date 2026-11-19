@@ -3,13 +3,15 @@ import { act, fireEvent, render, screen, waitFor, within } from "@testing-librar
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import indexHtml from "../index.html?raw";
-import App, { DOCK_OPACITY_STORAGE_KEY } from "./App";
+import App from "./App";
 import {
   resetMockStore,
   setAlwaysOnTop,
   setDockEdge,
   setDockExpanded,
+  DEFAULT_DOCK_APPEARANCE,
   type ActiveProfile,
+  type DockAppearance,
   type DockState,
   type Note,
 } from "./lib/bridge";
@@ -298,7 +300,7 @@ describe("App (fluxos integrados do dock)", () => {
     expect(rail).toHaveClass("bg-transparent");
   });
 
-  it("ajusta opacidade global do dock (40% a 100%) nos ajustes, mantém ao recolher e persiste no localStorage", async () => {
+  it("aplica tema, cor, largura e opacidades expandido/retraído em tempo real, persiste no backend e restaura padrão", async () => {
     const user = userEvent.setup();
     setTauriInternals(true);
 
@@ -309,11 +311,28 @@ describe("App (fluxos integrados do dock)", () => {
       visible: true,
       shortcuts: { toggle: "Alt+Space", newNote: "Ctrl+Shift+N" },
     };
+    let savedAppearance: DockAppearance = { ...DEFAULT_DOCK_APPEARANCE };
 
     invokeMock.mockImplementation(async (cmd: string, args?: Record<string, unknown>) => {
       if (cmd === "get_dock_state") return state;
       if (cmd === "list_notes" || cmd === "list_todos") return [];
       if (cmd === "get_active_profile") return DEFAULT_FALLBACK_PROFILE;
+      if (cmd === "get_dock_appearance") return savedAppearance;
+      if (cmd === "set_dock_appearance") {
+        const patch = (args?.appearance ?? {}) as Partial<DockAppearance>;
+        savedAppearance = {
+          theme: patch.theme ?? savedAppearance.theme,
+          accent: patch.accent ?? savedAppearance.accent,
+          expandedOpacity: patch.expandedOpacity ?? savedAppearance.expandedOpacity,
+          collapsedOpacity: patch.collapsedOpacity ?? savedAppearance.collapsedOpacity,
+          panelSize: patch.panelSize ?? savedAppearance.panelSize,
+        };
+        return savedAppearance;
+      }
+      if (cmd === "reset_dock_appearance") {
+        savedAppearance = { ...DEFAULT_DOCK_APPEARANCE };
+        return savedAppearance;
+      }
       if (cmd === "set_dock_expanded") {
         state = { ...state, expanded: Boolean(args?.expanded) };
         return state;
@@ -325,32 +344,51 @@ describe("App (fluxos integrados do dock)", () => {
     const { container, unmount } = render(<App />);
     const shell = container.firstElementChild as HTMLElement;
     expect(shell.style.opacity).toBe("1");
+    expect(shell).toHaveAttribute("data-theme", "dark");
 
     await user.click(screen.getByRole("button", { name: "Posição do dock e ajustes" }));
-    const slider = await screen.findByRole("slider", { name: "Opacidade do dock" });
-    expect(slider).toHaveValue("100");
+    const expandedSlider = await screen.findByRole("slider", { name: "Opacidade expandido" });
+    const collapsedSlider = screen.getByRole("slider", { name: "Opacidade retraído" });
 
-    fireEvent.change(slider, { target: { value: "70" } });
-    expect(shell.style.opacity).toBe("0.7");
-    expect(screen.getByText("70%")).toBeInTheDocument();
-    expect(window.localStorage.getItem(DOCK_OPACITY_STORAGE_KEY)).toBe("70");
+    await user.click(screen.getByRole("button", { name: "Claro" }));
+    await user.click(screen.getByRole("button", { name: "Esmeralda" }));
+    await user.click(screen.getByRole("button", { name: "Amplo" }));
+    fireEvent.change(expandedSlider, { target: { value: "80" } });
+    fireEvent.change(collapsedSlider, { target: { value: "55" } });
+
+    expect(shell).toHaveAttribute("data-theme", "light");
+    expect(shell).toHaveAttribute("data-accent", "emerald");
+    expect(shell).toHaveAttribute("data-panel-size", "wide");
+    expect(document.documentElement.dataset.theme).toBe("light");
+    expect(shell.style.opacity).toBe("0.8");
 
     await user.keyboard("{Escape}");
     await waitFor(() => {
-      expect(screen.queryByRole("slider", { name: "Opacidade do dock" })).not.toBeInTheDocument();
+      expect(screen.queryByRole("slider", { name: "Opacidade expandido" })).not.toBeInTheDocument();
     });
-    expect(shell.style.opacity).toBe("0.7");
+    expect(shell.style.opacity).toBe("0.55");
 
     unmount();
 
     const remounted = render(<App />);
-    expect((remounted.container.firstElementChild as HTMLElement).style.opacity).toBe("0.7");
-    remounted.unmount();
+    const remountedShell = remounted.container.firstElementChild as HTMLElement;
+    await waitFor(() => {
+      expect(remountedShell).toHaveAttribute("data-theme", "light");
+      expect(remountedShell).toHaveAttribute("data-accent", "emerald");
+      expect(remountedShell).toHaveAttribute("data-panel-size", "wide");
+      expect(remountedShell.style.opacity).toBe("0.55");
+    });
 
-    window.localStorage.setItem(DOCK_OPACITY_STORAGE_KEY, "10");
-    const clampedLow = render(<App />);
-    expect((clampedLow.container.firstElementChild as HTMLElement).style.opacity).toBe("0.4");
-    clampedLow.unmount();
+    await user.click(screen.getByRole("button", { name: "Posição do dock e ajustes" }));
+    await user.click(await screen.findByRole("button", { name: "Restaurar padrão" }));
+
+    await waitFor(() => {
+      expect(remountedShell).toHaveAttribute("data-theme", "dark");
+      expect(remountedShell).toHaveAttribute("data-accent", "violet");
+      expect(remountedShell).toHaveAttribute("data-panel-size", "default");
+      expect(remountedShell.style.opacity).toBe("1");
+    });
+    remounted.unmount();
   });
 
   it("persiste perfil CS, nota com autosave e tarefas vinculadas ao reabrir o dock e remove em cascata ao excluir nota", async () => {

@@ -21,8 +21,10 @@ import {
   searchPipedriveDeals,
   type ActiveProfile,
   type DealSummary,
+  type DockAppearance,
   type DockEdge,
   type DockState,
+  type UpdateDockAppearanceInput,
   type Note,
   type PipedriveSendType,
   type SetActiveProfileInput,
@@ -30,6 +32,7 @@ import {
 } from "../lib/bridge";
 import type { DockTab } from "./DockRail";
 import { PipedriveBar, type PipedriveDispatchState } from "./PipedriveBar";
+import { AppearanceSettingsCard } from "./AppearanceSettingsCard";
 import { ProfileSettingsCard } from "./ProfileSettingsCard";
 
 export type PersistenceStatus =
@@ -52,11 +55,12 @@ interface DockPanelProps {
   profile: ActiveProfile;
   persistenceStatus: PersistenceStatus;
   statusNotice: string | null;
-  dockOpacity: number;
+  appearance: DockAppearance;
   noteBodyRef: RefObject<HTMLTextAreaElement | null>;
   onSelectEdge: (edge: DockEdge) => void;
   onTogglePin: () => void;
-  onOpacityChange: (opacity: number) => void;
+  onUpdateAppearance: (patch: UpdateDockAppearanceInput) => void;
+  onResetAppearance: () => void;
   onCollapse: () => void;
   onHide: () => void;
   onSelectNote: (id: string) => void;
@@ -146,11 +150,12 @@ export function DockPanel({
   profile,
   persistenceStatus,
   statusNotice,
-  dockOpacity,
+  appearance,
   noteBodyRef,
   onSelectEdge,
   onTogglePin,
-  onOpacityChange,
+  onUpdateAppearance,
+  onResetAppearance,
   onCollapse,
   onHide,
   onSelectNote,
@@ -186,7 +191,6 @@ export function DockPanel({
   const pendingPipedriveActivityCount = activeNoteTodos.filter(
     (t) => !t.done && t.pipedriveActivityId === null
   ).length;
-  const opacityProgress = Math.max(0, Math.min(100, ((dockOpacity - 40) / 60) * 100));
 
   const noteTitleById = new Map(
     notes.map((n) => [n.id, n.title.trim() || "Sem título"])
@@ -724,6 +728,12 @@ export function DockPanel({
               onSaveProfile={onSaveProfile}
             />
 
+            <AppearanceSettingsCard
+              appearance={appearance}
+              onUpdateAppearance={onUpdateAppearance}
+              onResetAppearance={onResetAppearance}
+            />
+
             <section className="rounded-[16px] border border-border bg-card p-3">
               <div className="mb-2 text-[11px] font-medium text-foreground/80">
                 Borda de encaixe
@@ -769,34 +779,6 @@ export function DockPanel({
                 >
                   {dock.alwaysOnTop ? "Ativo" : "Desativado"}
                 </button>
-              </div>
-
-              <div className="flex flex-col gap-1.5 border-t border-border pt-2.5">
-                <div className="flex items-center justify-between">
-                  <label
-                    htmlFor="dock-opacity-slider"
-                    className="text-[12px] text-foreground"
-                  >
-                    Opacidade do dock
-                  </label>
-                  <span className="tabular-nums font-mono text-[11px] text-accent-foreground">
-                    {dockOpacity}%
-                  </span>
-                </div>
-                <input
-                  id="dock-opacity-slider"
-                  type="range"
-                  min={40}
-                  max={100}
-                  step={1}
-                  value={dockOpacity}
-                  aria-label="Opacidade do dock"
-                  onChange={(e) => onOpacityChange(Number(e.target.value))}
-                  style={{
-                    background: `linear-gradient(to right, var(--primary) ${opacityProgress}%, var(--secondary) ${opacityProgress}%)`,
-                  }}
-                  className="dock-range h-1.5 w-full cursor-pointer appearance-none rounded-full focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/60"
-                />
               </div>
 
               <div className="flex items-center justify-between border-t border-border pt-2 text-[11px] text-foreground/75">

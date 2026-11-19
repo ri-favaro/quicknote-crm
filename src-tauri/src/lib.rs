@@ -31,6 +31,13 @@ pub fn run() {
             dock::setup_tray(handle)?;
             dock::setup_global_shortcuts(handle);
 
+            let saved_appearance = app
+                .state::<Database>()
+                .get_dock_appearance()
+                .unwrap_or_default();
+            app.state::<DockManager>()
+                .set_panel_size(saved_appearance.panel_size);
+
             if let Some(window) = app.get_webview_window(MAIN_WINDOW_LABEL) {
                 let manager = app.state::<DockManager>();
                 let _ = dock::apply_window_geometry(&window, &manager, DockEdge::Right, false);
@@ -61,6 +68,9 @@ pub fn run() {
             commands::toggle_dock_expanded,
             commands::set_always_on_top,
             commands::hide_dock,
+            commands::get_dock_appearance,
+            commands::set_dock_appearance,
+            commands::reset_dock_appearance,
             commands::save_note_draft,
             commands::list_notes,
             commands::get_note,

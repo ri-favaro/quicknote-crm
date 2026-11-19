@@ -16,6 +16,45 @@ export interface DockState {
   shortcuts: DockShortcuts;
 }
 
+export type DockTheme = "dark" | "light" | "high-contrast";
+export type DockAccent = "violet" | "blue" | "emerald" | "amber";
+export type DockPanelSize = "compact" | "default" | "wide";
+
+export interface DockAppearance {
+  theme: DockTheme;
+  accent: DockAccent;
+  expandedOpacity: number;
+  collapsedOpacity: number;
+  panelSize: DockPanelSize;
+}
+
+export interface UpdateDockAppearanceInput {
+  theme?: DockTheme;
+  accent?: DockAccent;
+  expandedOpacity?: number;
+  collapsedOpacity?: number;
+  panelSize?: DockPanelSize;
+}
+
+export const MIN_DOCK_OPACITY = 40;
+export const MAX_DOCK_OPACITY = 100;
+
+export const DEFAULT_DOCK_APPEARANCE: DockAppearance = {
+  theme: "dark",
+  accent: "violet",
+  expandedOpacity: 100,
+  collapsedOpacity: 100,
+  panelSize: "default",
+};
+
+export function clampDockOpacity(value: number): number {
+  if (!Number.isFinite(value)) return MAX_DOCK_OPACITY;
+  return Math.min(
+    MAX_DOCK_OPACITY,
+    Math.max(MIN_DOCK_OPACITY, Math.round(value))
+  );
+}
+
 export interface ActiveProfile {
   authorId: string;
   authorName: string;
@@ -116,6 +155,7 @@ function createInitialDockState(): DockState {
 }
 
 let mockDockState: DockState = createInitialDockState();
+let mockDockAppearance: DockAppearance = { ...DEFAULT_DOCK_APPEARANCE };
 let mockProfileRecord = {
   authorId: DEFAULT_AUTHOR_ID,
   authorName: DEFAULT_AUTHOR_NAME,
@@ -142,6 +182,7 @@ let mockIntegrationLogs: MockIntegrationLog[] = [];
 export function resetMockStore(): void {
   if (isTauriRuntime()) return;
   mockDockState = createInitialDockState();
+  mockDockAppearance = { ...DEFAULT_DOCK_APPEARANCE };
   mockProfileRecord = {
     authorId: DEFAULT_AUTHOR_ID,
     authorName: DEFAULT_AUTHOR_NAME,
@@ -193,6 +234,43 @@ function normalizeDueDate(dueDate?: string | null): string | null {
 
 export function isTauriRuntime(): boolean {
   return typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
+}
+
+export async function getDockAppearance(): Promise<DockAppearance> {
+  if (!isTauriRuntime()) {
+    return { ...mockDockAppearance };
+  }
+  return invoke<DockAppearance>("get_dock_appearance");
+}
+
+export async function setDockAppearance(
+  input: UpdateDockAppearanceInput
+): Promise<DockAppearance> {
+  if (!isTauriRuntime()) {
+    mockDockAppearance = {
+      theme: input.theme ?? mockDockAppearance.theme,
+      accent: input.accent ?? mockDockAppearance.accent,
+      expandedOpacity:
+        input.expandedOpacity !== undefined
+          ? clampDockOpacity(input.expandedOpacity)
+          : mockDockAppearance.expandedOpacity,
+      collapsedOpacity:
+        input.collapsedOpacity !== undefined
+          ? clampDockOpacity(input.collapsedOpacity)
+          : mockDockAppearance.collapsedOpacity,
+      panelSize: input.panelSize ?? mockDockAppearance.panelSize,
+    };
+    return { ...mockDockAppearance };
+  }
+  return invoke<DockAppearance>("set_dock_appearance", { appearance: input });
+}
+
+export async function resetDockAppearance(): Promise<DockAppearance> {
+  if (!isTauriRuntime()) {
+    mockDockAppearance = { ...DEFAULT_DOCK_APPEARANCE };
+    return { ...mockDockAppearance };
+  }
+  return invoke<DockAppearance>("reset_dock_appearance");
 }
 
 export async function getDockState(): Promise<DockState> {

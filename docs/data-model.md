@@ -50,11 +50,42 @@ O backend Rust inicializa o arquivo `quicknote.db` em `app_data_dir` com `PRAGMA
 | `token` | `TEXT` | Token identificador write-only (nunca retornado ao frontend) |
 | `updated_at` | `TEXT (ISO-8601)` | Última atualização do perfil |
 
+### `dock_appearance` (apenas SQLite local)
+| Coluna | Tipo | Descrição |
+| :--- | :--- | :--- |
+| `singleton` | `INTEGER (PK CHECK (singleton = 1))` | Garante registro único de preferências visuais do dock |
+| `theme` | `TEXT` (`'dark' \| 'light' \| 'high-contrast'`) | Tema ativo aplicado em `DockRail` e `DockPanel` |
+| `accent` | `TEXT` (`'violet' \| 'blue' \| 'emerald' \| 'amber'`) | Cor de destaque ativa |
+| `expanded_opacity` | `INTEGER` (`40..100`) | Opacidade percentual do dock expandido |
+| `collapsed_opacity` | `INTEGER` (`40..100`) | Opacidade percentual do dock retraído |
+| `panel_size` | `TEXT` (`'compact' \| 'default' \| 'wide'`) | Preset de largura do painel expandido |
+| `updated_at` | `TEXT (ISO-8601)` | Última atualização de aparência |
+
 ---
 
 ## 2. Contrato `src/lib/bridge.ts` (Frontend -> Rust)
 
 ```ts
+export type DockTheme = "dark" | "light" | "high-contrast";
+export type DockAccent = "violet" | "blue" | "emerald" | "amber";
+export type DockPanelSize = "compact" | "default" | "wide";
+
+export interface DockAppearance {
+  theme: DockTheme;
+  accent: DockAccent;
+  expandedOpacity: number;
+  collapsedOpacity: number;
+  panelSize: DockPanelSize;
+}
+
+export interface UpdateDockAppearanceInput {
+  theme?: DockTheme;
+  accent?: DockAccent;
+  expandedOpacity?: number;
+  collapsedOpacity?: number;
+  panelSize?: DockPanelSize;
+}
+
 export interface ActiveProfile {
   authorId: string;
   authorName: string;
@@ -173,6 +204,9 @@ export interface SyncResult {
 | `delete_todo` | `{ id: string }` | Remove a tarefa por ID. |
 | `set_active_profile` | `{ profile: SetActiveProfileInput }` | Salva `authorId`, `authorName` e opcionalmente atualiza ou limpa `token` no SQLite; retorna `ActiveProfile` sem o token bruto. |
 | `get_active_profile` | — | Retorna o perfil salvo (`isConfigured: true`) ou fallback (`local-cs` / `CS Local`, `isConfigured: false`) sem expor `token`. |
+| `get_dock_appearance` | — | Retorna preferências visuais salvas em `dock_appearance` ou valores padrão (`dark`, `violet`, `100%`, `100%`, `default`). |
+| `set_dock_appearance` | `{ appearance: UpdateDockAppearanceInput }` | Persiste patch parcial em `dock_appearance` com clamp de opacidade (`40..100`) e redimensiona imediatamente a janela expandida quando `panelSize` muda. |
+| `reset_dock_appearance` | — | Remove customizações de `dock_appearance`, restaura padrões originais e reaplica largura padrão na janela expandida. |
 
 ### Integrações Externas (Infra IPC + `reqwest` + `.env`)
 | Comando | Argumentos | Retorno / Comportamento |
