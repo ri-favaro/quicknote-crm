@@ -119,11 +119,29 @@ export interface DispatchResult {
   message: string;
 }
 
-// Comandos planejados (próximo marco de integrações)
+export type PipedriveSendType = "note" | "activity";
+
+export interface SendToPipedriveInput {
+  noteId: string;
+  type: PipedriveSendType;
+  dealId: number;
+}
+
+export interface TriggerN8nWebhookInput {
+  noteId: string;
+  webhookKey?: string;
+}
+
+export interface SyncResult {
+  syncedNotes: number;
+  syncedLogs: number;
+}
+
+// Wrappers de integrações implementados em src/lib/bridge.ts
 // searchPipedriveDeals(query: string) -> Promise<DealSummary[]>
-// sendToPipedrive(params: { noteId: string; type: "note" | "activity"; dealId: number }) -> Promise<DispatchResult>
-// triggerN8nWebhook(params: { noteId: string; webhookKey?: string }) -> Promise<DispatchResult>
-// syncSupabase() -> Promise<{ syncedNotes: number; syncedLogs: number }>
+// sendToPipedrive(params: SendToPipedriveInput) -> Promise<DispatchResult>
+// triggerN8nWebhook(params: TriggerN8nWebhookInput) -> Promise<DispatchResult>
+// syncSupabase() -> Promise<SyncResult>
 ```
 
 ---
@@ -155,3 +173,11 @@ export interface DispatchResult {
 | `delete_todo` | `{ id: string }` | Remove a tarefa por ID. |
 | `set_active_profile` | `{ profile: SetActiveProfileInput }` | Salva `authorId`, `authorName` e opcionalmente atualiza ou limpa `token` no SQLite; retorna `ActiveProfile` sem o token bruto. |
 | `get_active_profile` | — | Retorna o perfil salvo (`isConfigured: true`) ou fallback (`local-cs` / `CS Local`, `isConfigured: false`) sem expor `token`. |
+
+### Integrações Externas (Infra IPC + `reqwest` + `.env`)
+| Comando | Argumentos | Retorno / Comportamento |
+| :--- | :--- | :--- |
+| `search_pipedrive_deals` | `{ query: string }` | Valida termo e credenciais Pipedrive (`PIPEDRIVE_API_BASE` / `PIPEDRIVE_API_TOKEN`); chamada HTTP será concluída na issue #10. |
+| `send_to_pipedrive` | `{ noteId: string, kind: "note" | "activity", dealId: number }` | No `bridge.ts`, `sendToPipedrive` recebe `type` e traduz para `kind` no `invoke`. Valida nota local, `kind`, `dealId` e credenciais; disparo HTTP na issue #10. |
+| `trigger_n8n_webhook` | `{ noteId: string, webhookKey: string | null }` | Valida nota local e `N8N_WEBHOOK_URL`; disparo HTTP na issue #11. |
+| `sync_supabase` | — | Valida `SUPABASE_URL` / `SUPABASE_ANON_KEY` e consulta pendências em `notes` / `integration_logs`; sync PostgREST na issue #12. |

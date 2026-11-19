@@ -80,6 +80,24 @@ export interface DispatchResult {
   message: string;
 }
 
+export type PipedriveSendType = "note" | "activity";
+
+export interface SendToPipedriveInput {
+  noteId: string;
+  type: PipedriveSendType;
+  dealId: number;
+}
+
+export interface TriggerN8nWebhookInput {
+  noteId: string;
+  webhookKey?: string;
+}
+
+export interface SyncResult {
+  syncedNotes: number;
+  syncedLogs: number;
+}
+
 const DEFAULT_AUTHOR_ID = "local-cs";
 const DEFAULT_AUTHOR_NAME = "CS Local";
 
@@ -103,8 +121,22 @@ let mockProfileRecord = {
   token: "",
   isConfigured: false,
 };
+interface MockIntegrationLog {
+  id: string;
+  noteId: string;
+  target: "pipedrive" | "n8n";
+  synced: boolean;
+}
+
+const MOCK_PIPEDRIVE_DEALS: DealSummary[] = [
+  { id: 101, title: "Expansão Enterprise Q4", orgName: "Acme Corp" },
+  { id: 204, title: "Onboarding CS Plus", orgName: "Beta Logistics" },
+  { id: 309, title: "Renovação Anual 2026", orgName: "Norte Digital" },
+];
+
 let mockNotes: Note[] = [];
 let mockTodos: Todo[] = [];
+let mockIntegrationLogs: MockIntegrationLog[] = [];
 
 export function resetMockStore(): void {
   if (isTauriRuntime()) return;
@@ -117,6 +149,7 @@ export function resetMockStore(): void {
   };
   mockNotes = [];
   mockTodos = [];
+  mockIntegrationLogs = [];
 }
 
 function toPublicProfile(): ActiveProfile {
@@ -301,6 +334,7 @@ export async function deleteNote(id: string): Promise<boolean> {
     mockNotes = mockNotes.filter((note) => note.id !== trimmed);
     if (mockNotes.length === prevLen) return false;
     mockTodos = mockTodos.filter((todo) => todo.noteId !== trimmed);
+    mockIntegrationLogs = mockIntegrationLogs.filter((log) => log.noteId !== trimmed);
     return true;
   }
   return invoke<boolean>("delete_note", { id });
@@ -425,4 +459,104 @@ export async function getActiveProfile(): Promise<ActiveProfile> {
     return toPublicProfile();
   }
   return invoke<ActiveProfile>("get_active_profile");
+}
+
+export async function searchPipedriveDeals(query: string): Promise<DealSummary[]> {
+  if (!isTauriRuntime()) {
+    const normalized = query.trim().toLowerCase();
+    if (!normalized) return [];
+    return MOCK_PIPEDRIVE_DEALS.filter(
+      (deal) =>
+        deal.title.toLowerCase().includes(normalized) ||
+        (deal.orgName?.toLowerCase().includes(normalized) ?? false)
+    ).map((deal) => ({ ...deal }));
+  }
+  return invoke<DealSummary[]>("search_pipedrive_deals", { query });
+}
+
+export async function sendToPipedrive(
+  params: SendToPipedriveInput
+): Promise<DispatchResult> {
+  if (!isTauriRuntime()) {
+    const noteId = params.noteId.trim();
+    if (!noteId || !mockNotes.some((note) => note.id === noteId)) {
+      throw new Error("Nota não encontrada no banco local.");
+    }
+    if (!Number.isInteger(params.dealId) || params.dealId <= 0) {
+      throw new Error("ID do negócio (dealId) deve ser maior que zero.");
+    }
+    const logId = crypto.randomUUID();
+    mockIntegrationLogs.push({
+      id: logId,
+      noteId,
+      target: "pipedrive",
+      synced: false,
+    });
+    return {
+      logId,
+      status: "sent",
+      message: `Envio simulado (${params.type}) para o deal #${params.dealId}.`,
+    };
+  }
+  return invoke<DispatchResult>("send_to_pipedrive", {
+    noteId: params.noteId,
+    kind: params.type,
+    dealId: params.dealId,
+  });
+}
+
+export async function triggerN8nWebhook(
+  params: TriggerN8nWebhookInput
+): Promise<DispatchResult> {
+  if (!isTauriRuntime()) {
+    const noteId = params.noteId.trim();
+    if (!noteId || !mockNotes.some((note) => note.id === noteId)) {
+      throw new Error("Nota não encontrada no banco local.");
+    }
+    const logId = crypto.randomUUID();
+    mockIntegrationLogs.push({
+      id: logId,
+      noteId,
+      target: "n8n",
+      synced: false,
+    });
+    const keyInfo = params.webhookKey?.trim()
+      ? ` (${params.webhookKey.trim()})`
+      : "";
+    return {
+      logId,
+      status: "sent",
+      message: `Webhook n8n${keyInfo} simulado para a nota ${noteId}.`,
+    };
+  }
+  return invoke<DispatchResult>("trigger_n8n_webhook", {
+    noteId: params.noteId,
+    webhookKey: params.webhookKey ?? null,
+  });
+}
+
+export async function syncSupabase(): Promise<SyncResult> {
+  if (!isTauriRuntime()) {
+    const now = new Date().toISOString();
+    let syncedNotes = 0;
+    mockNotes = mockNotes.map((note) => {
+      if (!note.syncedAt || note.updatedAt > note.syncedAt) {
+        syncedNotes += 1;
+        return { ...note, syncedAt: now };
+      }
+      return note;
+    });
+
+    let syncedLogs = 0;
+    mockIntegrationLogs = mockIntegrationLogs.map((log) => {
+      if (!log.synced) {
+        syncedLogs += 1;
+        return { ...log, synced: true };
+      }
+      return log;
+    });
+
+    return { syncedNotes, syncedLogs };
+  }
+  return invoke<SyncResult>("sync_supabase");
 }

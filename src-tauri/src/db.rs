@@ -79,6 +79,85 @@ pub struct SetActiveProfileInput {
     pub clear_token: bool,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum IntegrationTarget {
+    Pipedrive,
+    N8n,
+}
+
+impl IntegrationTarget {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Pipedrive => "pipedrive",
+            Self::N8n => "n8n",
+        }
+    }
+
+    pub fn from_db(value: &str) -> Result<Self, String> {
+        match value {
+            "pipedrive" => Ok(Self::Pipedrive),
+            "n8n" => Ok(Self::N8n),
+            other => Err(format!("Destino de integração inválido no SQLite: {other}")),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum IntegrationLogStatus {
+    Pending,
+    Sent,
+    Error,
+}
+
+impl IntegrationLogStatus {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Pending => "pending",
+            Self::Sent => "sent",
+            Self::Error => "error",
+        }
+    }
+
+    pub fn from_db(value: &str) -> Result<Self, String> {
+        match value {
+            "pending" => Ok(Self::Pending),
+            "sent" => Ok(Self::Sent),
+            "error" => Ok(Self::Error),
+            other => Err(format!(
+                "Status de log de integração inválido no SQLite: {other}"
+            )),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct IntegrationLog {
+    pub id: String,
+    pub note_id: String,
+    pub author_id: String,
+    pub target: IntegrationTarget,
+    pub status: IntegrationLogStatus,
+    pub payload_json: String,
+    pub response_status: Option<i64>,
+    pub error_message: Option<String>,
+    pub created_at: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct CreateIntegrationLogInput {
+    pub id: Option<String>,
+    pub note_id: String,
+    pub author_id: Option<String>,
+    pub target: IntegrationTarget,
+    pub status: IntegrationLogStatus,
+    pub payload_json: String,
+    pub response_status: Option<i64>,
+    pub error_message: Option<String>,
+}
+
 pub struct Database {
     conn: Mutex<Connection>,
 }
@@ -384,6 +463,207 @@ impl Database {
             .map_err(|e| format!("Falha ao excluir tarefa: {e}"))?;
         Ok(affected > 0)
     }
+
+    pub fn create_integration_log(
+        &self,
+        input: CreateIntegrationLogInput,
+    ) -> Result<IntegrationLog, String> {
+        let note_id = input.note_id.trim();
+        if note_id.is_empty() {
+            return Err("Todo log de integração precisa estar vinculado a uma nota.".to_string());
+        }
+        let payload_json = input.payload_json.trim();
+        if payload_json.is_empty() {
+            return Err("Payload JSON do log de integração é obrigatório.".to_string());
+        }
+
+        let conn = self.lock_conn()?;
+        let note_exists: Option<String> = conn
+            .query_row(
+                "SELECT id FROM notes WHERE id = ?1",
+                params![note_id],
+                |r| r.get(0),
+            )
+            .optional()
+            .map_err(|e| format!("Falha ao verificar nota vinculada: {e}"))?;
+        if note_exists.is_none() {
+            return Err("Nota vinculada não encontrada.".to_string());
+        }
+
+        let author_id = match normalize_optional_id(input.author_id) {
+            Some(id) => id,
+            None => read_active_profile(&conn)?.author_id,
+        };
+        let log_id = normalize_optional_id(input.id)
+            .unwrap_or_else(|| Uuid::new_v4().to_string());
+        let created_at = now_iso();
+
+        conn.execute(
+            "INSERT INTO integration_logs (
+                id, note_id, author_id, target, status,
+                payload_json, response_status, error_message, created_at
+             ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+            params![
+                log_id,
+                note_id,
+                author_id,
+                input.target.as_str(),
+                input.status.as_str(),
+                payload_json,
+                input.response_status,
+                input.error_message,
+                created_at
+            ],
+        )
+        .map_err(|e| format!("Falha ao gravar log de integração: {e}"))?;
+
+        read_integration_log_by_id(&conn, &log_id)?
+            .ok_or_else(|| "Log de integração salvo não foi encontrado após gravação.".to_string())
+    }
+
+    pub fn update_integration_log_status(
+        &self,
+        id: &str,
+        status: IntegrationLogStatus,
+        response_status: Option<i64>,
+        error_message: Option<String>,
+    ) -> Result<IntegrationLog, String> {
+        let trimmed = id.trim();
+        if trimmed.is_empty() {
+            return Err("Log de integração não encontrado.".to_string());
+        }
+
+        let conn = self.lock_conn()?;
+        let affected = conn
+            .execute(
+                "UPDATE integration_logs
+                 SET status = ?1, response_status = ?2, error_message = ?3
+                 WHERE id = ?4",
+                params![status.as_str(), response_status, error_message, trimmed],
+            )
+            .map_err(|e| format!("Falha ao atualizar log de integração: {e}"))?;
+
+        if affected == 0 {
+            return Err("Log de integração não encontrado.".to_string());
+        }
+
+        read_integration_log_by_id(&conn, trimmed)?
+            .ok_or_else(|| "Log de integração não encontrado.".to_string())
+    }
+
+    pub fn get_integration_log(&self, id: &str) -> Result<Option<IntegrationLog>, String> {
+        let trimmed = id.trim();
+        if trimmed.is_empty() {
+            return Ok(None);
+        }
+        let conn = self.lock_conn()?;
+        read_integration_log_by_id(&conn, trimmed)
+    }
+
+    pub fn list_integration_logs(
+        &self,
+        note_id: Option<&str>,
+    ) -> Result<Vec<IntegrationLog>, String> {
+        let conn = self.lock_conn()?;
+        let filtered_note_id = note_id.map(str::trim).filter(|s| !s.is_empty());
+
+        match filtered_note_id {
+            Some(nid) => {
+                let mut stmt = conn
+                    .prepare(
+                        "SELECT id, note_id, author_id, target, status,
+                                payload_json, response_status, error_message, created_at
+                         FROM integration_logs
+                         WHERE note_id = ?1
+                         ORDER BY created_at DESC, rowid DESC",
+                    )
+                    .map_err(|e| format!("Falha ao preparar listagem de logs: {e}"))?;
+                let rows = stmt
+                    .query_map(params![nid], row_to_integration_log)
+                    .map_err(|e| format!("Falha ao listar logs de integração: {e}"))?;
+                let mut logs = Vec::new();
+                for row in rows {
+                    logs.push(row.map_err(|e| format!("Falha ao ler log de integração: {e}"))?);
+                }
+                Ok(logs)
+            }
+            None => {
+                let mut stmt = conn
+                    .prepare(
+                        "SELECT id, note_id, author_id, target, status,
+                                payload_json, response_status, error_message, created_at
+                         FROM integration_logs
+                         ORDER BY created_at DESC, rowid DESC",
+                    )
+                    .map_err(|e| format!("Falha ao preparar listagem de logs: {e}"))?;
+                let rows = stmt
+                    .query_map([], row_to_integration_log)
+                    .map_err(|e| format!("Falha ao listar logs de integração: {e}"))?;
+                let mut logs = Vec::new();
+                for row in rows {
+                    logs.push(row.map_err(|e| format!("Falha ao ler log de integração: {e}"))?);
+                }
+                Ok(logs)
+            }
+        }
+    }
+
+    pub fn list_pending_sync_notes(&self) -> Result<Vec<Note>, String> {
+        let conn = self.lock_conn()?;
+        let mut stmt = conn
+            .prepare(
+                "SELECT id, author_id, author_name, title, content_md,
+                        pipedrive_deal_id, pipedrive_person_id, created_at, updated_at, synced_at
+                 FROM notes
+                 WHERE synced_at IS NULL OR updated_at > synced_at
+                 ORDER BY updated_at ASC, rowid ASC",
+            )
+            .map_err(|e| format!("Falha ao preparar notas pendentes de sync: {e}"))?;
+        let rows = stmt
+            .query_map([], row_to_note)
+            .map_err(|e| format!("Falha ao listar notas pendentes de sync: {e}"))?;
+        let mut notes = Vec::new();
+        for row in rows {
+            notes.push(row.map_err(|e| format!("Falha ao ler nota pendente de sync: {e}"))?);
+        }
+        Ok(notes)
+    }
+
+    pub fn mark_note_synced(&self, id: &str, synced_at: &str) -> Result<bool, String> {
+        let trimmed = id.trim();
+        if trimmed.is_empty() {
+            return Ok(false);
+        }
+        let conn = self.lock_conn()?;
+        let affected = conn
+            .execute(
+                "UPDATE notes SET synced_at = ?1 WHERE id = ?2",
+                params![synced_at, trimmed],
+            )
+            .map_err(|e| format!("Falha ao marcar nota sincronizada: {e}"))?;
+        Ok(affected > 0)
+    }
+
+    pub fn list_pending_integration_logs(&self) -> Result<Vec<IntegrationLog>, String> {
+        let conn = self.lock_conn()?;
+        let mut stmt = conn
+            .prepare(
+                "SELECT id, note_id, author_id, target, status,
+                        payload_json, response_status, error_message, created_at
+                 FROM integration_logs
+                 WHERE status IN ('pending', 'error')
+                 ORDER BY created_at ASC, rowid ASC",
+            )
+            .map_err(|e| format!("Falha ao preparar logs pendentes: {e}"))?;
+        let rows = stmt
+            .query_map([], row_to_integration_log)
+            .map_err(|e| format!("Falha ao listar logs pendentes: {e}"))?;
+        let mut logs = Vec::new();
+        for row in rows {
+            logs.push(row.map_err(|e| format!("Falha ao ler log pendente: {e}"))?);
+        }
+        Ok(logs)
+    }
 }
 
 fn init_schema(conn: &Connection) -> Result<(), String> {
@@ -516,6 +796,53 @@ fn row_to_todo(row: &Row<'_>) -> rusqlite::Result<Todo> {
         done: done_int != 0,
         due_date: row.get(4)?,
         pipedrive_activity_id: row.get(5)?,
+    })
+}
+
+fn read_integration_log_by_id(
+    conn: &Connection,
+    id: &str,
+) -> Result<Option<IntegrationLog>, String> {
+    conn.query_row(
+        "SELECT id, note_id, author_id, target, status,
+                payload_json, response_status, error_message, created_at
+         FROM integration_logs
+         WHERE id = ?1",
+        params![id],
+        row_to_integration_log,
+    )
+    .optional()
+    .map_err(|e| format!("Falha ao buscar log de integração: {e}"))
+}
+
+fn row_to_integration_log(row: &Row<'_>) -> rusqlite::Result<IntegrationLog> {
+    let target_raw: String = row.get(3)?;
+    let status_raw: String = row.get(4)?;
+    let target = IntegrationTarget::from_db(&target_raw).map_err(|msg| {
+        rusqlite::Error::FromSqlConversionFailure(
+            3,
+            rusqlite::types::Type::Text,
+            Box::new(std::io::Error::new(std::io::ErrorKind::InvalidData, msg)),
+        )
+    })?;
+    let status = IntegrationLogStatus::from_db(&status_raw).map_err(|msg| {
+        rusqlite::Error::FromSqlConversionFailure(
+            4,
+            rusqlite::types::Type::Text,
+            Box::new(std::io::Error::new(std::io::ErrorKind::InvalidData, msg)),
+        )
+    })?;
+
+    Ok(IntegrationLog {
+        id: row.get(0)?,
+        note_id: row.get(1)?,
+        author_id: row.get(2)?,
+        target,
+        status,
+        payload_json: row.get(5)?,
+        response_status: row.get(6)?,
+        error_message: row.get(7)?,
+        created_at: row.get(8)?,
     })
 }
 
@@ -948,5 +1275,154 @@ mod tests {
             params![note.id],
         );
         assert!(valid.is_ok());
+    }
+
+    #[test]
+    fn creates_updates_queries_and_cascades_integration_logs() {
+        let db = Database::open_in_memory().expect("open db");
+        db.set_active_profile(SetActiveProfileInput {
+            author_id: "cs-ana".to_string(),
+            author_name: "Ana".to_string(),
+            token: None,
+            clear_token: false,
+        })
+        .unwrap();
+
+        let note_a = db
+            .save_note_draft(SaveNoteDraftInput {
+                id: Some("note-a".to_string()),
+                title: "Nota A".to_string(),
+                content_md: "Corpo A".to_string(),
+                pipedrive_deal_id: Some(42),
+                pipedrive_person_id: None,
+            })
+            .unwrap();
+        let note_b = db
+            .save_note_draft(SaveNoteDraftInput {
+                id: Some("note-b".to_string()),
+                title: "Nota B".to_string(),
+                content_md: "Corpo B".to_string(),
+                pipedrive_deal_id: None,
+                pipedrive_person_id: None,
+            })
+            .unwrap();
+
+        let missing_note_err = db
+            .create_integration_log(CreateIntegrationLogInput {
+                id: None,
+                note_id: "nao-existe".to_string(),
+                author_id: None,
+                target: IntegrationTarget::Pipedrive,
+                status: IntegrationLogStatus::Pending,
+                payload_json: "{}".to_string(),
+                response_status: None,
+                error_message: None,
+            })
+            .unwrap_err();
+        assert!(missing_note_err.contains("Nota vinculada"));
+
+        let created = db
+            .create_integration_log(CreateIntegrationLogInput {
+                id: None,
+                note_id: note_a.id.clone(),
+                author_id: None,
+                target: IntegrationTarget::Pipedrive,
+                status: IntegrationLogStatus::Pending,
+                payload_json: r#"{"deal_id":42}"#.to_string(),
+                response_status: None,
+                error_message: None,
+            })
+            .unwrap();
+        assert_eq!(created.author_id, "cs-ana");
+        assert_eq!(created.target, IntegrationTarget::Pipedrive);
+        assert_eq!(created.status, IntegrationLogStatus::Pending);
+
+        let updated = db
+            .update_integration_log_status(
+                &created.id,
+                IntegrationLogStatus::Sent,
+                Some(201),
+                None,
+            )
+            .unwrap();
+        assert_eq!(updated.status, IntegrationLogStatus::Sent);
+        assert_eq!(updated.response_status, Some(201));
+
+        let fetched = db.get_integration_log(&created.id).unwrap().unwrap();
+        assert_eq!(fetched, updated);
+
+        let failed = db
+            .create_integration_log(CreateIntegrationLogInput {
+                id: Some("log-err".to_string()),
+                note_id: note_b.id.clone(),
+                author_id: Some("cs-custom".to_string()),
+                target: IntegrationTarget::N8n,
+                status: IntegrationLogStatus::Error,
+                payload_json: r#"{"source":"quicknote-crm"}"#.to_string(),
+                response_status: Some(502),
+                error_message: Some("Bad Gateway".to_string()),
+            })
+            .unwrap();
+        assert_eq!(failed.author_id, "cs-custom");
+
+        let all_logs = db.list_integration_logs(None).unwrap();
+        assert_eq!(all_logs.len(), 2);
+
+        let note_a_logs = db.list_integration_logs(Some(&note_a.id)).unwrap();
+        assert_eq!(note_a_logs.len(), 1);
+        assert_eq!(note_a_logs[0].id, created.id);
+
+        let pending_logs = db.list_pending_integration_logs().unwrap();
+        assert_eq!(pending_logs.len(), 1);
+        assert_eq!(pending_logs[0].id, "log-err");
+
+        assert!(db.delete_note(&note_b.id).unwrap());
+        assert!(db.get_integration_log("log-err").unwrap().is_none());
+        assert!(db.list_pending_integration_logs().unwrap().is_empty());
+    }
+
+    #[test]
+    fn lists_pending_sync_notes_when_unsynced_or_modified_after_sync() {
+        let db = Database::open_in_memory().expect("open db");
+
+        let note_1 = db
+            .save_note_draft(SaveNoteDraftInput {
+                id: Some("sync-1".to_string()),
+                title: "Primeira".to_string(),
+                content_md: "v1".to_string(),
+                pipedrive_deal_id: None,
+                pipedrive_person_id: None,
+            })
+            .unwrap();
+        let note_2 = db
+            .save_note_draft(SaveNoteDraftInput {
+                id: Some("sync-2".to_string()),
+                title: "Segunda".to_string(),
+                content_md: "v1".to_string(),
+                pipedrive_deal_id: None,
+                pipedrive_person_id: None,
+            })
+            .unwrap();
+
+        let pending_initial = db.list_pending_sync_notes().unwrap();
+        assert_eq!(pending_initial.len(), 2);
+
+        assert!(db.mark_note_synced(&note_1.id, &note_1.updated_at).unwrap());
+        let pending_after_one = db.list_pending_sync_notes().unwrap();
+        assert_eq!(pending_after_one.len(), 1);
+        assert_eq!(pending_after_one[0].id, note_2.id);
+
+        let _ = db
+            .save_note_draft(SaveNoteDraftInput {
+                id: Some(note_1.id.clone()),
+                title: "Primeira editada".to_string(),
+                content_md: "v2".to_string(),
+                pipedrive_deal_id: None,
+                pipedrive_person_id: None,
+            })
+            .unwrap();
+
+        let pending_after_edit = db.list_pending_sync_notes().unwrap();
+        assert_eq!(pending_after_edit.len(), 2);
     }
 }

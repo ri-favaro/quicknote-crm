@@ -8,6 +8,9 @@ use crate::dock::{
     apply_edge, apply_expanded, emit_state, hide_window, toggle_expanded, DockEdge, DockManager,
     DockState, MAIN_WINDOW_LABEL,
 };
+use crate::integrations::{
+    n8n, pipedrive, supabase, DealSummary, DispatchResult, IntegrationClient, SyncResult,
+};
 
 #[tauri::command]
 pub fn get_dock_state(manager: State<'_, DockManager>) -> DockState {
@@ -98,4 +101,41 @@ pub fn set_active_profile(
 #[tauri::command]
 pub fn get_active_profile(db: State<'_, Database>) -> Result<ActiveProfile, String> {
     db.get_active_profile()
+}
+
+#[tauri::command]
+pub async fn search_pipedrive_deals(
+    integrations: State<'_, IntegrationClient>,
+    query: String,
+) -> Result<Vec<DealSummary>, String> {
+    pipedrive::search_deals(&integrations, &query).await
+}
+
+#[tauri::command]
+pub async fn send_to_pipedrive(
+    db: State<'_, Database>,
+    integrations: State<'_, IntegrationClient>,
+    note_id: String,
+    kind: String,
+    deal_id: i64,
+) -> Result<DispatchResult, String> {
+    pipedrive::send_note_or_activity(&db, &integrations, &note_id, &kind, deal_id).await
+}
+
+#[tauri::command]
+pub async fn trigger_n8n_webhook(
+    db: State<'_, Database>,
+    integrations: State<'_, IntegrationClient>,
+    note_id: String,
+    webhook_key: Option<String>,
+) -> Result<DispatchResult, String> {
+    n8n::trigger_webhook(&db, &integrations, &note_id, webhook_key.as_deref()).await
+}
+
+#[tauri::command]
+pub async fn sync_supabase(
+    db: State<'_, Database>,
+    integrations: State<'_, IntegrationClient>,
+) -> Result<SyncResult, String> {
+    supabase::sync(&db, &integrations).await
 }
