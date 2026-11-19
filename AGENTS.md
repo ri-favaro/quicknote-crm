@@ -26,4 +26,4 @@ Consulte e atualize o documento correspondente antes/depois de mudanças relevan
 - **Idioma:** Documentação, commits e PRs em **pt-br**, com prefixos Conventional Commits (`feat:`, `fix:`, `docs:`, `chore:`, `refactor:`).
 - **Simplicidade:** Código enxuto, sem comentários óbvios e sem abstrações especulativas fora do escopo do MVP.
 - **Documentação viva:** Ao alterar comandos Tauri, tabelas, payloads ou variáveis de ambiente, atualize `docs/` no mesmo commit.
-- **Verificação real:** Sempre validar build/lint/testes (`cargo check`/`cargo test` e `npm run build`) antes de dar uma tarefa como pronta.
+- **Verificação real:** Sempre validar `pnpm typecheck`, `pnpm test`, `pnpm build`, `cargo check` e `cargo test` antes de dar uma tarefa como pronta (mesma barra do workflow `.github/workflows/ci.yml`).

@@ -98,7 +98,7 @@ describe("DockPanel", () => {
     expect(props.onUpdateNote).toHaveBeenCalledWith("note-1", { title: "Onboarding Acme!" });
   });
 
-  it("renderiza checklist de tarefas com contador e ações de concluir/remover", async () => {
+  it("renderiza checklist de tarefas com contador e rótulos semânticos de concluir/desmarcar/remover", async () => {
     const user = userEvent.setup();
     const todos: SessionTodo[] = [
       { id: "t1", text: "Enviar ata", done: true },
@@ -108,13 +108,14 @@ describe("DockPanel", () => {
     const { props } = renderPanel({ activeTab: "todos", todos });
 
     expect(screen.getByText("1/2")).toBeInTheDocument();
-    expect(screen.getByText("Enviar ata")).toHaveClass("line-through");
+
+    await user.click(screen.getByRole("button", { name: "Desmarcar tarefa" }));
+    expect(props.onToggleTodo).toHaveBeenCalledWith("t1");
 
     await user.click(screen.getByRole("button", { name: "Concluir tarefa" }));
     expect(props.onToggleTodo).toHaveBeenCalledWith("t2");
 
     const removeButtons = screen.getAllByRole("button", { name: "Remover tarefa" });
-    expect(removeButtons[0].className).toContain("focus-visible:opacity-100");
     await user.click(removeButtons[1]);
     expect(props.onRemoveTodo).toHaveBeenCalledWith("t2");
   });

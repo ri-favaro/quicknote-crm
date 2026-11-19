@@ -1,8 +1,13 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { setAlwaysOnTop, setDockEdge, setDockExpanded } from "./lib/bridge";
 import App from "./App";
+import {
+  setAlwaysOnTop,
+  setDockEdge,
+  setDockExpanded,
+  type DockState,
+} from "./lib/bridge";
 
 const invokeMock = vi.fn();
 const listenMock = vi.fn();
@@ -27,6 +32,7 @@ function setTauriInternals(enabled: boolean) {
 beforeEach(async () => {
   setTauriInternals(false);
   await setDockEdge("right");
+  await setDockExpanded(true);
   await setDockExpanded(false);
   await setAlwaysOnTop(true);
 });
@@ -62,44 +68,55 @@ describe("App (fluxos integrados do dock)", () => {
     });
   });
 
-  it("gerencia tarefas e sincroniza badge de pendentes na barra", async () => {
+  it("gerencia tarefas e sincroniza badge de pendentes no botão da barra", async () => {
     const user = userEvent.setup();
     render(<App />);
 
-    await user.click(screen.getByRole("button", { name: "Tarefas e follow-ups" }));
+    const todosRailButton = screen.getByRole("button", { name: "Tarefas e follow-ups" });
+    await user.click(todosRailButton);
     const input = await screen.findByPlaceholderText("Adicionar follow-up...");
 
     await user.type(input, "Enviar proposta{Enter}");
     await user.type(input, "Confirmar kickoff{Enter}");
 
     expect(screen.getByText("0/2")).toBeInTheDocument();
-    expect(screen.getByText("2")).toBeInTheDocument();
+    expect(within(todosRailButton).getByText("2")).toBeInTheDocument();
 
     const checkButtons = screen.getAllByRole("button", { name: "Concluir tarefa" });
     await user.click(checkButtons[0]);
 
     expect(screen.getByText("1/2")).toBeInTheDocument();
-    expect(screen.getByText("1")).toBeInTheDocument();
+    expect(within(todosRailButton).getByText("1")).toBeInTheDocument();
   });
 
-  it("abre ajustes no clique direito quando recolhido e menu de contexto quando expandido", async () => {
+  it("prioriza Escape fechando primeiro o menu de contexto e só depois recolhendo o painel", async () => {
+    const user = userEvent.setup();
     render(<App />);
 
     const rail = screen.getByRole("navigation", { name: "Barra rápida QuickNote" });
     fireEvent.contextMenu(rail);
-
     expect(await screen.findByRole("heading", { name: "Posição e ajustes" })).toBeInTheDocument();
 
     fireEvent.contextMenu(rail);
     expect(await screen.findByText("Posição do dock")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Recolher barra" })).toBeInTheDocument();
+
+    await user.keyboard("{Escape}");
+    await waitFor(() => {
+      expect(screen.queryByText("Posição do dock")).not.toBeInTheDocument();
+    });
+    expect(screen.getByRole("heading", { name: "Posição e ajustes" })).toBeInTheDocument();
+
+    await user.keyboard("{Escape}");
+    await waitFor(() => {
+      expect(screen.queryByRole("heading", { name: "Posição e ajustes" })).not.toBeInTheDocument();
+    });
   });
 
-  it("registra listeners IPC apenas uma vez mesmo após digitar notas no modo Tauri", async () => {
+  it("mantém listeners IPC únicos, preserva nota anterior no dock://new-note, sincroniza dock://state-changed e limpa no unmount", async () => {
     setTauriInternals(true);
 
-    let state = {
-      edge: "right" as const,
+    let state: DockState = {
+      edge: "right",
       expanded: false,
       alwaysOnTop: true,
       visible: true,
@@ -116,15 +133,18 @@ describe("App (fluxos integrados do dock)", () => {
     });
 
     const listeners = new Map<string, (event: { payload: unknown }) => void>();
+    const unlistenSpies = new Map<string, ReturnType<typeof vi.fn>>();
     listenMock.mockImplementation(
       async (eventName: string, cb: (event: { payload: unknown }) => void) => {
         listeners.set(eventName, cb);
-        return vi.fn();
+        const unlisten = vi.fn();
+        unlistenSpies.set(eventName, unlisten);
+        return unlisten;
       }
     );
 
     const user = userEvent.setup();
-    render(<App />);
+    const { unmount } = render(<App />);
 
     await waitFor(() => {
       expect(listenMock).toHaveBeenCalledWith("dock://new-note", expect.any(Function));
@@ -137,9 +157,70 @@ describe("App (fluxos integrados do dock)", () => {
 
     expect(listenMock).toHaveBeenCalledTimes(2);
 
-    listeners.get("dock://new-note")?.({ payload: undefined });
+    act(() => {
+      listeners.get("dock://new-note")?.({ payload: undefined });
+    });
     await waitFor(() => {
       expect(screen.getByPlaceholderText("Cliente ou título da call...")).toHaveValue("");
     });
+    expect(screen.getByRole("button", { name: "Cliente Alpha" })).toBeInTheDocument();
+
+    act(() => {
+      listeners.get("dock://state-changed")?.({
+        payload: { ...state, edge: "left", expanded: true },
+      });
+    });
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Encaixar na esquerda" })).toHaveAttribute(
+        "aria-pressed",
+        "true"
+      );
+    });
+
+    unmount();
+    expect(unlistenSpies.get("dock://new-note")).toHaveBeenCalledTimes(1);
+    expect(unlistenSpies.get("dock://state-changed")).toHaveBeenCalledTimes(1);
+  });
+
+  it("impede que getDockState inicial atrasado sobrescreva ação já executada pelo usuário", async () => {
+    setTauriInternals(true);
+
+    let resolveInitialState!: (value: DockState) => void;
+    const initialPromise = new Promise<DockState>((resolve) => {
+      resolveInitialState = resolve;
+    });
+
+    invokeMock.mockImplementation(async (cmd: string, args?: Record<string, unknown>) => {
+      if (cmd === "get_dock_state") return initialPromise;
+      if (cmd === "set_dock_expanded") {
+        return {
+          edge: "right",
+          expanded: Boolean(args?.expanded),
+          alwaysOnTop: true,
+          visible: true,
+          shortcuts: { toggle: "Alt+Space", newNote: "Ctrl+Shift+N" },
+        };
+      }
+      return initialPromise;
+    });
+    listenMock.mockResolvedValue(vi.fn());
+
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(screen.getByRole("button", { name: "Notas rápidas" }));
+    expect(await screen.findByRole("heading", { name: "Notas rápidas" })).toBeInTheDocument();
+
+    await act(async () => {
+      resolveInitialState({
+        edge: "right",
+        expanded: false,
+        alwaysOnTop: true,
+        visible: true,
+        shortcuts: { toggle: "Alt+Space", newNote: "Ctrl+Shift+N" },
+      });
+    });
+
+    expect(screen.getByRole("heading", { name: "Notas rápidas" })).toBeInTheDocument();
   });
 });

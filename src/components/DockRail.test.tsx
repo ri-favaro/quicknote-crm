@@ -1,10 +1,10 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { DockRail } from "./DockRail";
 
 describe("DockRail", () => {
-  it("renderiza os 4 botões com acessibilidade e orientação correta nas bordas", () => {
+  it("renderiza os 4 botões com acessibilidade e orientação semântica por borda", () => {
     const { rerender } = render(
       <DockRail
         edge="right"
@@ -18,7 +18,7 @@ describe("DockRail", () => {
     );
 
     const nav = screen.getByRole("navigation", { name: "Barra rápida QuickNote" });
-    expect(nav.className).toContain("flex-col");
+    expect(nav).toHaveAttribute("data-orientation", "vertical");
     expect(screen.getByRole("button", { name: "Notas rápidas" })).toHaveAttribute(
       "aria-pressed",
       "true"
@@ -44,27 +44,41 @@ describe("DockRail", () => {
       />
     );
 
-    expect(nav.className).toContain("flex-row");
+    expect(nav).toHaveAttribute("data-orientation", "horizontal");
     expect(screen.getByRole("button", { name: "Notas rápidas" })).toHaveAttribute(
       "aria-pressed",
       "false"
     );
   });
 
-  it("exibe contador de tarefas pendentes e limita a 9+", () => {
+  it("exibe badge apenas com tarefas pendentes e respeita fronteira 0, 9 e 9+", () => {
     const { rerender } = render(
       <DockRail
         edge="right"
         expanded={false}
         activeTab="notes"
-        pendingTodos={3}
+        pendingTodos={0}
         onSelectTab={vi.fn()}
         onNewNote={vi.fn()}
         onContextMenu={vi.fn()}
       />
     );
 
-    expect(screen.getByText("3")).toBeInTheDocument();
+    const todosBtn = screen.getByRole("button", { name: "Tarefas e follow-ups" });
+    expect(within(todosBtn).queryByText(/\d/)).not.toBeInTheDocument();
+
+    rerender(
+      <DockRail
+        edge="right"
+        expanded={false}
+        activeTab="notes"
+        pendingTodos={9}
+        onSelectTab={vi.fn()}
+        onNewNote={vi.fn()}
+        onContextMenu={vi.fn()}
+      />
+    );
+    expect(within(todosBtn).getByText("9")).toBeInTheDocument();
 
     rerender(
       <DockRail
@@ -77,8 +91,7 @@ describe("DockRail", () => {
         onContextMenu={vi.fn()}
       />
     );
-
-    expect(screen.getByText("9+")).toBeInTheDocument();
+    expect(within(todosBtn).getByText("9+")).toBeInTheDocument();
   });
 
   it("dispara callbacks de abas, nova nota e clique direito", async () => {

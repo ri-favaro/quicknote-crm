@@ -71,6 +71,17 @@ describe("bridge (modo web/mock)", () => {
     expect(invokeMock).not.toHaveBeenCalled();
   });
 
+  it("reabre expandido em toggleDockExpanded quando oculto mesmo se já estava expandido", async () => {
+    const bridge = await import("./bridge");
+
+    await bridge.setDockExpanded(true);
+    await bridge.hideDock();
+
+    const toggled = await bridge.toggleDockExpanded();
+    expect(toggled.visible).toBe(true);
+    expect(toggled.expanded).toBe(true);
+  });
+
   it("retorna funções unlisten no-op para listeners fora do Tauri", async () => {
     const bridge = await import("./bridge");
 
@@ -119,6 +130,15 @@ describe("bridge (modo Tauri IPC)", () => {
     invokeMock.mockResolvedValueOnce(undefined);
     await bridge.hideDock();
     expect(invokeMock).toHaveBeenLastCalledWith("hide_dock");
+  });
+
+  it("propaga rejeição do backend Rust quando invoke falha", async () => {
+    setTauriInternals(true);
+    const bridge = await import("./bridge");
+
+    invokeMock.mockRejectedValueOnce(new Error("Janela principal não encontrada"));
+
+    await expect(bridge.setDockEdge("left")).rejects.toThrow("Janela principal não encontrada");
   });
 
   it("registra listeners de eventos dock:// e propaga payload ao callback", async () => {

@@ -113,25 +113,37 @@ impl DockManager {
     }
 
     fn suppress_move_events(&self) {
+        self.suppress_move_events_at(Instant::now());
+    }
+
+    fn suppress_move_events_at(&self, now: Instant) {
         let mut guard = self
             .ignore_moves_until
             .lock()
             .expect("ignore_moves_until poisoned");
-        *guard = Instant::now() + Duration::from_millis(PROGRAMMATIC_MOVE_GUARD_MS);
+        *guard = now + Duration::from_millis(PROGRAMMATIC_MOVE_GUARD_MS);
     }
 
     fn is_ignoring_moves(&self) -> bool {
+        self.is_ignoring_moves_at(Instant::now())
+    }
+
+    fn is_ignoring_moves_at(&self, now: Instant) -> bool {
         let guard = self
             .ignore_moves_until
             .lock()
             .expect("ignore_moves_until poisoned");
-        Instant::now() < *guard
+        now < *guard
     }
 
     fn record_user_move(&self) -> bool {
+        self.record_user_move_at(Instant::now())
+    }
+
+    fn record_user_move_at(&self, now: Instant) -> bool {
         {
             let mut guard = self.last_move_at.lock().expect("last_move_at poisoned");
-            *guard = Instant::now();
+            *guard = now;
         }
         self.snap_scheduled
             .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
@@ -139,9 +151,13 @@ impl DockManager {
     }
 
     fn remaining_debounce(&self) -> Option<Duration> {
+        self.remaining_debounce_at(Instant::now())
+    }
+
+    fn remaining_debounce_at(&self, now: Instant) -> Option<Duration> {
         let last = *self.last_move_at.lock().expect("last_move_at poisoned");
         let target = last + Duration::from_millis(DRAG_SNAP_DEBOUNCE_MS);
-        target.checked_duration_since(Instant::now())
+        target.checked_duration_since(now)
     }
 
     fn clear_snap_scheduled(&self) {
@@ -519,6 +535,10 @@ mod tests {
             (1516, 246, 404, 540)
         );
         assert_eq!(
+            compute_dock_rect(0, 0, 1920, 1080, 1.0, DockEdge::Left, true),
+            (0, 246, 404, 540)
+        );
+        assert_eq!(
             compute_dock_rect(0, 0, 1920, 1080, 1.0, DockEdge::Top, true),
             (750, 0, 420, 500)
         );
@@ -574,6 +594,8 @@ mod tests {
             let parsed: DockEdge = serde_json::from_str(raw).expect("deserialize DockEdge");
             assert_eq!(parsed, expected);
         }
+
+        assert!(serde_json::from_str::<DockEdge>("\"bottom\"").is_err());
     }
 
     #[test]
@@ -602,22 +624,31 @@ mod tests {
     }
 
     #[test]
-    fn dock_manager_drag_debounce_and_move_suppression() {
+    fn dock_manager_drag_debounce_and_move_suppression_expire_deterministically() {
         let manager = DockManager::new();
+        let t0 = Instant::now();
 
-        assert!(manager.record_user_move());
-        assert!(!manager.record_user_move());
-        assert!(manager.remaining_debounce().is_some());
+        assert!(manager.record_user_move_at(t0));
+        assert!(!manager.record_user_move_at(t0 + Duration::from_millis(50)));
+        assert!(manager
+            .remaining_debounce_at(t0 + Duration::from_millis(100))
+            .is_some());
+        assert!(manager
+            .remaining_debounce_at(t0 + Duration::from_millis(50 + DRAG_SNAP_DEBOUNCE_MS + 1))
+            .is_none());
 
         manager.clear_snap_scheduled();
-        assert!(manager.record_user_move());
+        assert!(manager.record_user_move_at(t0 + Duration::from_millis(400)));
 
-        manager.suppress_move_events();
-        assert!(manager.is_ignoring_moves());
+        manager.suppress_move_events_at(t0);
+        assert!(manager.is_ignoring_moves_at(t0 + Duration::from_millis(100)));
+        assert!(!manager.is_ignoring_moves_at(
+            t0 + Duration::from_millis(PROGRAMMATIC_MOVE_GUARD_MS + 1)
+        ));
     }
 
     #[test]
-    fn compute_dock_rect_clamps_height_on_small_monitor() {
+    fn clamps_y_origin_when_panel_exceeds_monitor_height() {
         let (x, y, w, h) = compute_dock_rect(0, 100, 1024, 480, 1.0, DockEdge::Right, true);
         assert_eq!((w, h), (404, 540));
         assert_eq!(x, 620);
@@ -625,7 +656,7 @@ mod tests {
     }
 
     #[test]
-    fn compute_nearest_edge_handles_secondary_monitor() {
+    fn compute_nearest_edge_handles_secondary_and_negative_x_monitors() {
         assert_eq!(
             compute_nearest_edge(1920, 100, 2560, 1440, 1940, 700, 56, 236),
             DockEdge::Left
@@ -637,6 +668,14 @@ mod tests {
         assert_eq!(
             compute_nearest_edge(1920, 100, 2560, 1440, 3100, 110, 236, 56),
             DockEdge::Top
+        );
+        assert_eq!(
+            compute_nearest_edge(-1920, 0, 1920, 1080, -1890, 420, 56, 236),
+            DockEdge::Left
+        );
+        assert_eq!(
+            compute_nearest_edge(-1920, 0, 1920, 1080, -90, 420, 56, 236),
+            DockEdge::Right
         );
     }
 }

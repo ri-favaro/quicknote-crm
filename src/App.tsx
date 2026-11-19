@@ -162,7 +162,9 @@ export default function App() {
     });
 
     onDockStateChanged((state) => {
-      if (active) setDock(state);
+      if (!active) return;
+      stateVersionRef.current += 1;
+      setDock(state);
     }).then((fn) => {
       if (!active) {
         fn();
