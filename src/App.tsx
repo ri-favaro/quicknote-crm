@@ -11,6 +11,7 @@ import {
   type PersistenceStatus,
   type TodoScope,
 } from "./components/DockPanel";
+import type { PipedriveDispatchState } from "./components/PipedriveBar";
 import { DockRail, type DockTab } from "./components/DockRail";
 import {
   deleteNote,
@@ -24,6 +25,8 @@ import {
   onDockNewNote,
   onDockStateChanged,
   saveNoteDraft,
+  searchPipedriveDeals,
+  sendToPipedrive,
   setActiveProfile,
   setAlwaysOnTop,
   setDockEdge,
@@ -31,9 +34,11 @@ import {
   toggleTodo,
   upsertTodo,
   type ActiveProfile,
+  type DealSummary,
   type DockEdge,
   type DockState,
   type Note,
+  type PipedriveSendType,
   type SetActiveProfileInput,
   type Todo,
 } from "./lib/bridge";
@@ -124,6 +129,12 @@ export default function App() {
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(
     null
   );
+  const [dealLabelsById, setDealLabelsById] = useState<
+    Record<number, DealSummary>
+  >({});
+  const [pipedriveDispatchByNote, setPipedriveDispatchByNote] = useState<
+    Record<string, PipedriveDispatchState>
+  >({});
 
   const noteBodyRef = useRef<HTMLTextAreaElement>(null);
   const stateVersionRef = useRef(0);
@@ -212,7 +223,8 @@ export default function App() {
           const isPersisted = persistedNoteIdsRef.current.has(id);
           const hasContent =
             currentNote.title.trim().length > 0 ||
-            currentNote.contentMd.trim().length > 0;
+            currentNote.contentMd.trim().length > 0 ||
+            currentNote.pipedriveDealId !== null;
           if (!isPersisted && !hasContent && !options?.force) {
             return null;
           }
@@ -583,7 +595,12 @@ export default function App() {
   }, [contextMenu, dock.expanded, handleExpand]);
 
   const handleUpdateNote = useCallback(
-    (id: string, patch: Partial<Pick<Note, "title" | "contentMd">>) => {
+    (
+      id: string,
+      patch: Partial<
+        Pick<Note, "title" | "contentMd" | "pipedriveDealId" | "pipedrivePersonId">
+      >
+    ) => {
       userEditedNotesRef.current = true;
       const nextRev = (noteRevRef.current.get(id) ?? 0) + 1;
       noteRevRef.current.set(id, nextRev);
@@ -609,7 +626,8 @@ export default function App() {
       const isPersisted = persistedNoteIdsRef.current.has(id);
       const hasContent =
         updatedNote.title.trim().length > 0 ||
-        updatedNote.contentMd.trim().length > 0;
+        updatedNote.contentMd.trim().length > 0 ||
+        updatedNote.pipedriveDealId !== null;
       if (!isPersisted && !hasContent) {
         lastSavedRevRef.current.set(id, nextRev);
         setPersistenceStatus({ kind: "idle" });
@@ -838,6 +856,87 @@ export default function App() {
     />
   );
 
+  const handleSelectPipedriveDeal = useCallback(
+    (noteId: string, deal: DealSummary | null) => {
+      if (deal) {
+        setDealLabelsById((prev) => ({ ...prev, [deal.id]: deal }));
+      }
+      handleUpdateNote(noteId, { pipedriveDealId: deal ? deal.id : null });
+      setPipedriveDispatchByNote((prev) => ({
+        ...prev,
+        [noteId]: { kind: "idle" },
+      }));
+    },
+    [handleUpdateNote]
+  );
+
+  const handleSendToPipedrive = useCallback(
+    async (type: PipedriveSendType, todoId?: string) => {
+      const targetNoteId = activeNoteIdRef.current;
+      const currentNote = notesRef.current.find((n) => n.id === targetNoteId);
+      if (!currentNote || currentNote.pipedriveDealId === null) {
+        return;
+      }
+
+      setPipedriveDispatchByNote((prev) => ({
+        ...prev,
+        [targetNoteId]: { kind: "sending", type, todoId },
+      }));
+
+      try {
+        const saved = await persistNoteById(targetNoteId, { force: true });
+        const dealId = saved?.pipedriveDealId ?? currentNote.pipedriveDealId;
+        if (!dealId) {
+          throw new Error("Vincule um negócio do Pipedrive antes de enviar.");
+        }
+
+        const result = await sendToPipedrive({
+          noteId: targetNoteId,
+          type,
+          dealId,
+          todoId,
+        });
+
+        if (type === "activity") {
+          const refreshedTodos = await listTodos();
+          if (isMountedRef.current) {
+            setTodos(refreshedTodos);
+          }
+        }
+
+        if (!isMountedRef.current) return;
+        setPipedriveDispatchByNote((prev) => ({
+          ...prev,
+          [targetNoteId]:
+            result.status === "sent"
+              ? { kind: "sent", type, message: result.message }
+              : { kind: "error", type, todoId, message: result.message },
+        }));
+      } catch (err) {
+        if (!isMountedRef.current) return;
+        setPipedriveDispatchByNote((prev) => ({
+          ...prev,
+          [targetNoteId]: {
+            kind: "error",
+            type,
+            todoId,
+            message: toErrorMessage(err),
+          },
+        }));
+      }
+    },
+    [persistNoteById]
+  );
+
+  const activeNoteObj = notes.find((n) => n.id === activeNoteId) ?? notes[0];
+  const activeLinkedDeal =
+    activeNoteObj?.pipedriveDealId != null
+      ? (dealLabelsById[activeNoteObj.pipedriveDealId] ?? null)
+      : null;
+  const activePipedriveDispatch: PipedriveDispatchState = activeNoteObj
+    ? (pipedriveDispatchByNote[activeNoteObj.id] ?? { kind: "idle" })
+    : { kind: "idle" };
+
   const panelNode = dock.expanded ? (
     <DockPanel
       dock={dock}
@@ -870,6 +969,13 @@ export default function App() {
       onToggleTodo={(id) => void handleToggleTodo(id)}
       onRemoveTodo={(id) => void handleRemoveTodo(id)}
       onOpenNoteFromTodo={handleOpenNoteFromTodo}
+      linkedDeal={activeLinkedDeal}
+      pipedriveDispatch={activePipedriveDispatch}
+      onSearchPipedriveDeals={searchPipedriveDeals}
+      onSelectPipedriveDeal={handleSelectPipedriveDeal}
+      onSendToPipedrive={(type, todoId) =>
+        void handleSendToPipedrive(type, todoId)
+      }
       onSaveProfile={handleSaveProfile}
       onOpenSettings={() => setActiveTab("settings")}
     />

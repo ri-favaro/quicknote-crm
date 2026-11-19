@@ -12,19 +12,24 @@ import {
   Pin,
   PinOff,
   Plus,
+  Send,
   Trash2,
 } from "lucide-react";
 import { useEffect, useState, type FormEvent, type RefObject } from "react";
 import {
   isTauriRuntime,
+  searchPipedriveDeals,
   type ActiveProfile,
+  type DealSummary,
   type DockEdge,
   type DockState,
   type Note,
+  type PipedriveSendType,
   type SetActiveProfileInput,
   type Todo,
 } from "../lib/bridge";
 import type { DockTab } from "./DockRail";
+import { PipedriveBar, type PipedriveDispatchState } from "./PipedriveBar";
 import { ProfileSettingsCard } from "./ProfileSettingsCard";
 
 export type PersistenceStatus =
@@ -69,6 +74,11 @@ interface DockPanelProps {
   onToggleTodo: (id: string) => void;
   onRemoveTodo: (id: string) => void;
   onOpenNoteFromTodo: (noteId: string) => void;
+  linkedDeal?: DealSummary | null;
+  pipedriveDispatch?: PipedriveDispatchState;
+  onSearchPipedriveDeals?: (query: string) => Promise<DealSummary[]>;
+  onSelectPipedriveDeal?: (noteId: string, deal: DealSummary | null) => void;
+  onSendToPipedrive?: (type: PipedriveSendType, todoId?: string) => void;
   onSaveProfile: (input: SetActiveProfileInput) => Promise<void>;
   onOpenSettings: () => void;
 }
@@ -155,6 +165,11 @@ export function DockPanel({
   onToggleTodo,
   onRemoveTodo,
   onOpenNoteFromTodo,
+  linkedDeal = null,
+  pipedriveDispatch = { kind: "idle" },
+  onSearchPipedriveDeals = searchPipedriveDeals,
+  onSelectPipedriveDeal,
+  onSendToPipedrive,
   onSaveProfile,
   onOpenSettings,
 }: DockPanelProps) {
@@ -168,6 +183,9 @@ export function DockPanel({
   const visibleTodos = todoScope === "note" ? activeNoteTodos : todos;
   const completedCount = visibleTodos.filter((t) => t.done).length;
   const noteCompletedCount = activeNoteTodos.filter((t) => t.done).length;
+  const pendingPipedriveActivityCount = activeNoteTodos.filter(
+    (t) => !t.done && t.pipedriveActivityId === null
+  ).length;
   const opacityProgress = Math.max(0, Math.min(100, ((dockOpacity - 40) / 60) * 100));
 
   const noteTitleById = new Map(
@@ -408,6 +426,20 @@ export function DockPanel({
               </div>
             )}
 
+            {onSelectPipedriveDeal && onSendToPipedrive && (
+              <PipedriveBar
+                dealId={activeNote.pipedriveDealId}
+                linkedDeal={linkedDeal}
+                pendingActivityCount={pendingPipedriveActivityCount}
+                dispatchState={pipedriveDispatch}
+                onSearchDeals={onSearchPipedriveDeals}
+                onSelectDeal={(deal) =>
+                  onSelectPipedriveDeal(activeNote.id, deal)
+                }
+                onSend={onSendToPipedrive}
+              />
+            )}
+
             <textarea
               ref={noteBodyRef}
               value={activeNote.contentMd}
@@ -483,6 +515,29 @@ export function DockPanel({
                         >
                           {formatDueDateLabel(todo.dueDate)}
                         </span>
+                      )}
+                      {todo.pipedriveActivityId !== null ? (
+                        <span
+                          title={`Atividade #${todo.pipedriveActivityId} enviada ao Pipedrive`}
+                          className="tabular-nums shrink-0 rounded bg-emerald-500/15 px-1 py-0.5 font-mono text-[10px] text-emerald-200"
+                        >
+                          PD #{todo.pipedriveActivityId}
+                        </span>
+                      ) : (
+                        activeNote.pipedriveDealId !== null &&
+                        !todo.done &&
+                        onSendToPipedrive && (
+                          <button
+                            type="button"
+                            onClick={() => onSendToPipedrive("activity", todo.id)}
+                            disabled={pipedriveDispatch.kind === "sending"}
+                            aria-label="Enviar tarefa como atividade no Pipedrive"
+                            title="Enviar como atividade no Pipedrive"
+                            className="flex h-5 w-5 shrink-0 items-center justify-center rounded text-accent-foreground/80 opacity-0 transition-opacity duration-150 hover:bg-muted hover:text-foreground focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring group-hover:opacity-100 disabled:opacity-40 cursor-pointer"
+                          >
+                            <Send className="h-2.5 w-2.5" />
+                          </button>
+                        )
                       )}
                       <button
                         type="button"

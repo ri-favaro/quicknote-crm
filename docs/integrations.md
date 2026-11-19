@@ -12,9 +12,11 @@ Criar `.env.example` quando o scaffold iniciar (nunca commitar `.env`):
 - `SUPABASE_ANON_KEY` — chave para PostgREST (ou chave apropriada conforme RLS definida)
 
 ## 2. Pipedrive (Sob Demanda)
-- **Busca de Deals:** `GET /deals/search?term=<query>&limit=10` para autocomplete rápido na nota.
-- **Criar Nota (`Note`):** `POST /notes` com `content`, `deal_id` e/ou `person_id`.
-- **Criar Atividade (`Activity`):** `POST /activities` para transformar itens de to-do em follow-up com prazo (`due_date`).
+- **Autenticação:** enviada exclusivamente pelo backend Rust via header HTTP `x-api-token` (nunca na query string e nunca exposta ao frontend ou a `integration_logs`).
+- **Busca de Deals:** `GET /deals/search?term=<query>&limit=10`, retornando lista enxuta `{ id, title, orgName? }` para autocomplete na nota.
+- **Criar Nota (`Note`):** `POST /notes` com `content` (título + Markdown), `deal_id` e `person_id` (quando presente).
+- **Criar Atividade (`Activity`):** `POST /activities` (`type: "task"`, `subject`, `deal_id`, `due_date`, `done`) para um `todoId` específico ou para todos os to-dos abertos ainda sem `pipedrive_activity_id` da nota, persistindo o `data.id` retornado em `todos.pipedrive_activity_id`.
+- **Auditoria:** toda tentativa grava `payload_json`, `response_status`, `status` (`sent` ou `error`) e `error_message` sanitizada em `integration_logs` (`target = "pipedrive"`).
 
 ## 3. n8n (Webhook POST Sob Demanda)
 Payload JSON padrão enviado ao webhook:
