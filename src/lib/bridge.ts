@@ -86,6 +86,7 @@ export interface SendToPipedriveInput {
   noteId: string;
   type: PipedriveSendType;
   dealId: number;
+  todoId?: string;
 }
 
 export interface TriggerN8nWebhookInput {
@@ -150,6 +151,7 @@ export function resetMockStore(): void {
   mockNotes = [];
   mockTodos = [];
   mockIntegrationLogs = [];
+  mockPipedriveActivitySeq = 5000;
 }
 
 function toPublicProfile(): ActiveProfile {
@@ -474,6 +476,8 @@ export async function searchPipedriveDeals(query: string): Promise<DealSummary[]
   return invoke<DealSummary[]>("search_pipedrive_deals", { query });
 }
 
+let mockPipedriveActivitySeq = 5000;
+
 export async function sendToPipedrive(
   params: SendToPipedriveInput
 ): Promise<DispatchResult> {
@@ -485,6 +489,55 @@ export async function sendToPipedrive(
     if (!Number.isInteger(params.dealId) || params.dealId <= 0) {
       throw new Error("ID do negócio (dealId) deve ser maior que zero.");
     }
+    if (params.type === "activity") {
+      const targetTodoId = params.todoId?.trim();
+      const noteTodos = mockTodos.filter((todo) => todo.noteId === noteId);
+      const targets = targetTodoId
+        ? noteTodos.filter((todo) => todo.id === targetTodoId)
+        : noteTodos.filter(
+            (todo) => !todo.done && todo.pipedriveActivityId === null
+          );
+
+      if (targetTodoId && targets.length === 0) {
+        throw new Error("Tarefa não encontrada nesta nota.");
+      }
+      if (targetTodoId && targets[0].pipedriveActivityId !== null) {
+        throw new Error(
+          "Esta tarefa já foi enviada como atividade ao Pipedrive."
+        );
+      }
+      if (targets.length === 0) {
+        throw new Error(
+          "Nenhuma tarefa pendente sem envio para criar atividade no Pipedrive."
+        );
+      }
+
+      const targetIds = new Set(targets.map((todo) => todo.id));
+      let lastActivityId = mockPipedriveActivitySeq;
+      mockTodos = mockTodos.map((todo) => {
+        if (!targetIds.has(todo.id)) return todo;
+        mockPipedriveActivitySeq += 1;
+        lastActivityId = mockPipedriveActivitySeq;
+        return { ...todo, pipedriveActivityId: lastActivityId };
+      });
+
+      const logId = crypto.randomUUID();
+      mockIntegrationLogs.push({
+        id: logId,
+        noteId,
+        target: "pipedrive",
+        synced: false,
+      });
+      return {
+        logId,
+        status: "sent",
+        message:
+          targets.length === 1
+            ? `Atividade #${lastActivityId} simulada no negócio #${params.dealId}.`
+            : `${targets.length} atividades simuladas no negócio #${params.dealId}.`,
+      };
+    }
+
     const logId = crypto.randomUUID();
     mockIntegrationLogs.push({
       id: logId,
@@ -498,11 +551,15 @@ export async function sendToPipedrive(
       message: `Envio simulado (${params.type}) para o deal #${params.dealId}.`,
     };
   }
-  return invoke<DispatchResult>("send_to_pipedrive", {
+  const payload: Record<string, unknown> = {
     noteId: params.noteId,
     kind: params.type,
     dealId: params.dealId,
-  });
+  };
+  if (params.todoId?.trim()) {
+    payload.todoId = params.todoId.trim();
+  }
+  return invoke<DispatchResult>("send_to_pipedrive", payload);
 }
 
 export async function triggerN8nWebhook(

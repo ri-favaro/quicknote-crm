@@ -317,6 +317,16 @@ describe("bridge (modo Tauri IPC)", () => {
       contentMd: "Resumo",
     });
 
+    await expect(
+      bridge.sendToPipedrive({ noteId: note.id, type: "activity", dealId: 101 })
+    ).rejects.toThrow("Nenhuma tarefa pendente");
+
+    await bridge.upsertTodo({
+      noteId: note.id,
+      text: "Enviar proposta",
+      dueDate: "2026-11-28",
+    });
+
     const pipeRes = await bridge.sendToPipedrive({
       noteId: note.id,
       type: "activity",
@@ -364,6 +374,22 @@ describe("bridge (modo Tauri IPC)", () => {
 
     invokeMock.mockResolvedValueOnce(dispatch);
     await expect(
+      bridge.sendToPipedrive({
+        noteId: "n-1",
+        type: "activity",
+        dealId: 42,
+        todoId: "t-9",
+      })
+    ).resolves.toEqual(dispatch);
+    expect(invokeMock).toHaveBeenLastCalledWith("send_to_pipedrive", {
+      noteId: "n-1",
+      kind: "activity",
+      dealId: 42,
+      todoId: "t-9",
+    });
+
+    invokeMock.mockResolvedValueOnce(dispatch);
+    await expect(
       bridge.triggerN8nWebhook({ noteId: "n-1", webhookKey: "k1" })
     ).resolves.toEqual(dispatch);
     expect(invokeMock).toHaveBeenLastCalledWith("trigger_n8n_webhook", {
@@ -377,6 +403,41 @@ describe("bridge (modo Tauri IPC)", () => {
       syncedLogs: 3,
     });
     expect(invokeMock).toHaveBeenLastCalledWith("sync_supabase");
+  });
+
+  it("atualiza pipedriveActivityId no modo browser preview ao enviar atividade", async () => {
+    const bridge = await import("./bridge");
+    bridge.resetMockStore();
+    const note = await bridge.saveNoteDraft({
+      title: "Call",
+      contentMd: "Notas",
+      pipedriveDealId: 101,
+    });
+    const todo = await bridge.upsertTodo({
+      noteId: note.id,
+      text: "Enviar minuta",
+      dueDate: "2026-11-30",
+    });
+
+    const res = await bridge.sendToPipedrive({
+      noteId: note.id,
+      type: "activity",
+      dealId: 101,
+      todoId: todo.id,
+    });
+    expect(res.status).toBe("sent");
+
+    const updatedTodos = await bridge.listTodos(note.id);
+    expect(updatedTodos[0].pipedriveActivityId).toBeGreaterThan(0);
+
+    await expect(
+      bridge.sendToPipedrive({
+        noteId: note.id,
+        type: "activity",
+        dealId: 101,
+        todoId: todo.id,
+      })
+    ).rejects.toThrow("já foi enviada");
   });
 
   it("propaga rejeição do backend Rust quando invoke falha", async () => {

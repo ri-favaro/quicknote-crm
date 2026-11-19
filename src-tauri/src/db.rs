@@ -464,6 +464,35 @@ impl Database {
         Ok(affected > 0)
     }
 
+    pub fn set_todo_pipedrive_activity_id(
+        &self,
+        id: &str,
+        pipedrive_activity_id: i64,
+    ) -> Result<Todo, String> {
+        let trimmed = id.trim();
+        if trimmed.is_empty() {
+            return Err("Tarefa não encontrada.".to_string());
+        }
+        if pipedrive_activity_id <= 0 {
+            return Err("ID da atividade no Pipedrive deve ser maior que zero.".to_string());
+        }
+
+        let conn = self.lock_conn()?;
+        let affected = conn
+            .execute(
+                "UPDATE todos SET pipedrive_activity_id = ?1 WHERE id = ?2",
+                params![pipedrive_activity_id, trimmed],
+            )
+            .map_err(|e| format!("Falha ao salvar pipedrive_activity_id na tarefa: {e}"))?;
+
+        if affected == 0 {
+            return Err("Tarefa não encontrada.".to_string());
+        }
+
+        read_todo_by_id(&conn, trimmed)?
+            .ok_or_else(|| "Tarefa não encontrada.".to_string())
+    }
+
     pub fn create_integration_log(
         &self,
         input: CreateIntegrationLogInput,
@@ -1424,5 +1453,36 @@ mod tests {
 
         let pending_after_edit = db.list_pending_sync_notes().unwrap();
         assert_eq!(pending_after_edit.len(), 2);
+    }
+
+    #[test]
+    fn persists_pipedrive_activity_id_on_todo() {
+        let db = Database::open_in_memory().unwrap();
+        let note = db
+            .save_note_draft(SaveNoteDraftInput {
+                id: Some("n-act".to_string()),
+                title: "Call".to_string(),
+                content_md: "Resumo".to_string(),
+                pipedrive_deal_id: Some(42),
+                pipedrive_person_id: None,
+            })
+            .unwrap();
+
+        let todo = db
+            .upsert_todo(UpsertTodoInput {
+                id: Some("t-act".to_string()),
+                note_id: note.id,
+                text: "Enviar proposta".to_string(),
+                done: false,
+                due_date: Some("2026-11-25".to_string()),
+            })
+            .unwrap();
+        assert_eq!(todo.pipedrive_activity_id, None);
+
+        let updated = db.set_todo_pipedrive_activity_id(&todo.id, 9876).unwrap();
+        assert_eq!(updated.pipedrive_activity_id, Some(9876));
+
+        assert!(db.set_todo_pipedrive_activity_id(&todo.id, 0).is_err());
+        assert!(db.set_todo_pipedrive_activity_id("inexistente", 9876).is_err());
     }
 }

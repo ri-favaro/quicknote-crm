@@ -279,4 +279,88 @@ describe("DockPanel", () => {
     await user.click(screen.getByRole("button", { name: "Tentar novamente" }));
     expect(props.onRetrySave).toHaveBeenCalledTimes(1);
   });
+
+  it("permite buscar e vincular um Deal do Pipedrive na nota atual", async () => {
+    const user = userEvent.setup();
+    const onSearchPipedriveDeals = vi.fn().mockResolvedValue([
+      { id: 101, title: "Expansão Enterprise", orgName: "Acme Corp" },
+    ]);
+    const onSelectPipedriveDeal = vi.fn();
+    const onSendToPipedrive = vi.fn();
+
+    renderPanel({
+      onSearchPipedriveDeals,
+      onSelectPipedriveDeal,
+      onSendToPipedrive,
+    });
+
+    const input = screen.getByLabelText("Buscar negócio no Pipedrive");
+    await user.type(input, "Acme");
+
+    await waitFor(() => {
+      expect(onSearchPipedriveDeals).toHaveBeenCalledWith("Acme");
+    });
+
+    const option = await screen.findByRole("option");
+    expect(option).toHaveTextContent("Expansão Enterprise");
+    expect(option).toHaveTextContent("Acme Corp");
+
+    await user.click(option);
+    expect(onSelectPipedriveDeal).toHaveBeenCalledWith("note-1", {
+      id: 101,
+      title: "Expansão Enterprise",
+      orgName: "Acme Corp",
+    });
+  });
+
+  it("exibe ações de envio ao Pipedrive, badge de atividade enviada e permite reenvio em caso de erro", async () => {
+    const user = userEvent.setup();
+    const onSendToPipedrive = vi.fn();
+    const onSelectPipedriveDeal = vi.fn();
+
+    const todos: Todo[] = [
+      {
+        id: "t-pending",
+        noteId: "note-1",
+        text: "Agendar QBR",
+        done: false,
+        dueDate: "2026-11-30",
+        pipedriveActivityId: null,
+      },
+      {
+        id: "t-synced",
+        noteId: "note-1",
+        text: "Enviar ata",
+        done: false,
+        dueDate: null,
+        pipedriveActivityId: 8821,
+      },
+    ];
+
+    renderPanel({
+      notes: [{ ...BASE_NOTES[0], pipedriveDealId: 101 }],
+      todos,
+      linkedDeal: { id: 101, title: "Expansão Enterprise", orgName: "Acme Corp" },
+      pipedriveDispatch: {
+        kind: "error",
+        type: "note",
+        message: "Pipedrive retornou HTTP 401: Invalid token",
+      },
+      onSelectPipedriveDeal,
+      onSendToPipedrive,
+    });
+
+    expect(screen.getByText("#101")).toBeInTheDocument();
+    expect(screen.getByText("PD #8821")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /Enviar nota/i }));
+    expect(onSendToPipedrive).toHaveBeenCalledWith("note");
+
+    await user.click(screen.getByRole("button", { name: /Atividades \(1\)/i }));
+    expect(onSendToPipedrive).toHaveBeenCalledWith("activity");
+
+    expect(screen.getByRole("alert")).toHaveTextContent("HTTP 401");
+    await user.click(screen.getByRole("button", { name: /Reenviar/i }));
+    expect(onSendToPipedrive).toHaveBeenCalledWith("note", undefined);
+  });
 });

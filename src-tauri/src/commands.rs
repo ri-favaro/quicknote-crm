@@ -118,8 +118,17 @@ pub async fn send_to_pipedrive(
     note_id: String,
     kind: String,
     deal_id: i64,
+    todo_id: Option<String>,
 ) -> Result<DispatchResult, String> {
-    pipedrive::send_note_or_activity(&db, &integrations, &note_id, &kind, deal_id).await
+    pipedrive::send_note_or_activity(
+        &db,
+        &integrations,
+        &note_id,
+        &kind,
+        deal_id,
+        todo_id.as_deref(),
+    )
+    .await
 }
 
 #[tauri::command]

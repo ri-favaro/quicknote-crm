@@ -177,7 +177,7 @@ export interface SyncResult {
 ### Integrações Externas (Infra IPC + `reqwest` + `.env`)
 | Comando | Argumentos | Retorno / Comportamento |
 | :--- | :--- | :--- |
-| `search_pipedrive_deals` | `{ query: string }` | Valida termo e credenciais Pipedrive (`PIPEDRIVE_API_BASE` / `PIPEDRIVE_API_TOKEN`); chamada HTTP será concluída na issue #10. |
-| `send_to_pipedrive` | `{ noteId: string, kind: "note" | "activity", dealId: number }` | No `bridge.ts`, `sendToPipedrive` recebe `type` e traduz para `kind` no `invoke`. Valida nota local, `kind`, `dealId` e credenciais; disparo HTTP na issue #10. |
+| `search_pipedrive_deals` | `{ query: string }` | Consulta `GET /deals/search?term=<query>&limit=10` no Pipedrive via header `x-api-token` e retorna `DealSummary[]` (`{ id, title, orgName? }`) sem expor o token. |
+| `send_to_pipedrive` | `{ noteId: string, kind: "note" | "activity", dealId: number, todoId?: string }` | No `bridge.ts`, `sendToPipedrive` traduz `type` para `kind` (e repassa `todoId` quando informado). Envia `POST /notes` ou `POST /activities` via `reqwest`, persiste `pipedrive_activity_id` em `todos` e grava tentativa (`sent` ou `error`) em `integration_logs`. |
 | `trigger_n8n_webhook` | `{ noteId: string, webhookKey: string | null }` | Valida nota local e `N8N_WEBHOOK_URL`; disparo HTTP na issue #11. |
 | `sync_supabase` | — | Valida `SUPABASE_URL` / `SUPABASE_ANON_KEY` e consulta pendências em `notes` / `integration_logs`; sync PostgREST na issue #12. |
