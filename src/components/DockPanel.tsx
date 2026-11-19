@@ -130,7 +130,9 @@ export function DockPanel({
                 <button
                   key={opt.id}
                   type="button"
-                  title={`Encaixar na ${opt.label.toLowerCase()}`}
+                  title={opt.tooltip}
+                  aria-label={opt.tooltip}
+                  aria-pressed={active}
                   onClick={() => onSelectEdge(opt.id)}
                   className={`flex h-6 w-6 items-center justify-center rounded-[7px] transition-[background-color,color] duration-150 cursor-pointer ${
                     active
