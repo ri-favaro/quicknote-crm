@@ -1,0 +1,27 @@
+﻿# Node / Frontend
+node_modules/
+dist/
+.vite/
+*.local
+
+# Rust / Tauri
+target/
+src-tauri/target/
+*.rs.bk
+
+# Environment & Secrets
+.env
+.env.*
+!.env.example
+
+# Local SQLite / Logs
+*.db
+*.db-shm
+*.db-wal
+*.log
+
+# OS / IDE
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
