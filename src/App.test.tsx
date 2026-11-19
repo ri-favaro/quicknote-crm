@@ -1,7 +1,9 @@
+/// <reference types="vite/client" />
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import App from "./App";
+import indexHtml from "../index.html?raw";
+import App, { DOCK_OPACITY_STORAGE_KEY } from "./App";
 import {
   setAlwaysOnTop,
   setDockEdge,
@@ -30,6 +32,7 @@ function setTauriInternals(enabled: boolean) {
 }
 
 beforeEach(async () => {
+  window.localStorage.clear();
   setTauriInternals(false);
   await setDockEdge("right");
   await setDockExpanded(true);
@@ -222,5 +225,88 @@ describe("App (fluxos integrados do dock)", () => {
     });
 
     expect(screen.getByRole("heading", { name: "Notas rápidas" })).toBeInTheDocument();
+  });
+
+  it("preserva fundo transparente no index.html e recorte arredondado limpo no runtime Tauri", async () => {
+    const bodyMatch = indexHtml.match(/<body[^>]*class="([^"]*)"/i);
+    expect(bodyMatch).not.toBeNull();
+    const bodyClasses = bodyMatch?.[1].split(/\s+/) ?? [];
+    expect(bodyClasses).toContain("bg-transparent");
+    expect(bodyClasses.some((cls) => /^bg-(zinc|black|slate|neutral|gray|stone)-?/.test(cls))).toBe(
+      false
+    );
+
+    setTauriInternals(true);
+    invokeMock.mockResolvedValue({
+      edge: "right",
+      expanded: false,
+      alwaysOnTop: true,
+      visible: true,
+      shortcuts: { toggle: "Alt+Space", newNote: "Ctrl+Shift+N" },
+    } satisfies DockState);
+    listenMock.mockResolvedValue(vi.fn());
+
+    const { container } = render(<App />);
+    const shell = container.firstElementChild as HTMLElement | null;
+    expect(shell).not.toBeNull();
+    expect(shell).toHaveClass("overflow-hidden", "rounded-l-[22px]", "bg-[#121316]");
+    expect(shell).not.toHaveClass("bg-zinc-950");
+    expect(shell?.style.opacity).toBe("1");
+
+    const rail = screen.getByRole("navigation", { name: "Barra rápida QuickNote" });
+    expect(rail).toHaveClass("bg-transparent");
+  });
+
+  it("ajusta opacidade global do dock (40% a 100%) nos ajustes, mantém ao recolher e persiste no localStorage", async () => {
+    const user = userEvent.setup();
+    setTauriInternals(true);
+
+    let state: DockState = {
+      edge: "right",
+      expanded: false,
+      alwaysOnTop: true,
+      visible: true,
+      shortcuts: { toggle: "Alt+Space", newNote: "Ctrl+Shift+N" },
+    };
+
+    invokeMock.mockImplementation(async (cmd: string, args?: Record<string, unknown>) => {
+      if (cmd === "get_dock_state") return state;
+      if (cmd === "set_dock_expanded") {
+        state = { ...state, expanded: Boolean(args?.expanded) };
+        return state;
+      }
+      return state;
+    });
+    listenMock.mockResolvedValue(vi.fn());
+
+    const { container, unmount } = render(<App />);
+    const shell = container.firstElementChild as HTMLElement;
+    expect(shell.style.opacity).toBe("1");
+
+    await user.click(screen.getByRole("button", { name: "Posição do dock e ajustes" }));
+    const slider = await screen.findByRole("slider", { name: "Opacidade do dock" });
+    expect(slider).toHaveValue("100");
+
+    fireEvent.change(slider, { target: { value: "70" } });
+    expect(shell.style.opacity).toBe("0.7");
+    expect(screen.getByText("70%")).toBeInTheDocument();
+    expect(window.localStorage.getItem(DOCK_OPACITY_STORAGE_KEY)).toBe("70");
+
+    await user.keyboard("{Escape}");
+    await waitFor(() => {
+      expect(screen.queryByRole("slider", { name: "Opacidade do dock" })).not.toBeInTheDocument();
+    });
+    expect(shell.style.opacity).toBe("0.7");
+
+    unmount();
+
+    const remounted = render(<App />);
+    expect((remounted.container.firstElementChild as HTMLElement).style.opacity).toBe("0.7");
+    remounted.unmount();
+
+    window.localStorage.setItem(DOCK_OPACITY_STORAGE_KEY, "10");
+    const clampedLow = render(<App />);
+    expect((clampedLow.container.firstElementChild as HTMLElement).style.opacity).toBe("0.4");
+    clampedLow.unmount();
   });
 });

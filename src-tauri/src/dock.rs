@@ -678,4 +678,26 @@ mod tests {
             DockEdge::Right
         );
     }
+
+    #[test]
+    fn tauri_conf_enforces_transparent_frameless_main_window_without_opaque_backing() {
+        let conf: serde_json::Value =
+            serde_json::from_str(include_str!("../tauri.conf.json")).expect("parse tauri.conf.json");
+        let main_window = conf["app"]["windows"]
+            .as_array()
+            .expect("windows array")
+            .iter()
+            .find(|w| w["label"] == MAIN_WINDOW_LABEL)
+            .expect("main window config");
+
+        assert_eq!(main_window["decorations"], false);
+        assert_eq!(main_window["transparent"], true);
+        assert_eq!(main_window["shadow"], false);
+        assert_eq!(main_window["noRedirectionBitmap"], true);
+        assert_eq!(main_window["visible"], false);
+        assert!(
+            main_window.get("backgroundColor").is_none() || main_window["backgroundColor"].is_null(),
+            "backgroundColor opaco no tao pinta WM_ERASEBKGND sem alpha no Windows"
+        );
+    }
 }

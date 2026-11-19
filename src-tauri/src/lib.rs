@@ -18,6 +18,7 @@ pub fn run() {
             if let Some(window) = app.get_webview_window(MAIN_WINDOW_LABEL) {
                 let manager = app.state::<DockManager>();
                 let _ = dock::apply_window_geometry(&window, &manager, DockEdge::Right, false);
+                let _ = window.show();
             }
 
             Ok(())

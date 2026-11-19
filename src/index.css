@@ -10,6 +10,7 @@
     padding: 0;
     overflow: hidden;
     background: transparent;
+    background-color: transparent;
     color: #f4f4f5;
     font-family: "Inter", "Segoe UI", system-ui, -apple-system, sans-serif;
     -webkit-font-smoothing: antialiased;
@@ -29,4 +30,31 @@
 * {
   scrollbar-width: thin;
   scrollbar-color: rgba(255, 255, 255, 0.14) transparent;
+}
+
+.dock-range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 14px;
+  width: 14px;
+  border-radius: 9999px;
+  background: #34d399;
+  border: 2px solid #121316;
+  box-shadow: 0 0 0 1px rgba(52, 211, 153, 0.35);
+  transition: transform 150ms ease, background-color 150ms ease;
+}
+
+.dock-range::-webkit-slider-thumb:hover {
+  transform: scale(1.1);
+  background: #6ee7b7;
+}
+
+.dock-range::-moz-range-thumb {
+  height: 14px;
+  width: 14px;
+  border-radius: 9999px;
+  background: #34d399;
+  border: 2px solid #121316;
+  box-shadow: 0 0 0 1px rgba(52, 211, 153, 0.35);
+  transition: transform 150ms ease, background-color 150ms ease;
 }

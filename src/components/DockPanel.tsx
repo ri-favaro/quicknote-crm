@@ -37,9 +37,11 @@ interface DockPanelProps {
   todos: SessionTodo[];
   todoDraft: string;
   statusNotice: string | null;
+  dockOpacity: number;
   noteBodyRef: RefObject<HTMLTextAreaElement | null>;
   onSelectEdge: (edge: DockEdge) => void;
   onTogglePin: () => void;
+  onOpacityChange: (opacity: number) => void;
   onCollapse: () => void;
   onHide: () => void;
   onSelectNote: (id: string) => void;
@@ -83,9 +85,11 @@ export function DockPanel({
   todos,
   todoDraft,
   statusNotice,
+  dockOpacity,
   noteBodyRef,
   onSelectEdge,
   onTogglePin,
+  onOpacityChange,
   onCollapse,
   onHide,
   onSelectNote,
@@ -98,9 +102,10 @@ export function DockPanel({
 }: DockPanelProps) {
   const activeNote = notes.find((n) => n.id === activeNoteId) ?? notes[0];
   const completedCount = todos.filter((t) => t.done).length;
+  const opacityProgress = Math.max(0, Math.min(100, ((dockOpacity - 40) / 60) * 100));
 
   return (
-    <div className="flex min-h-0 min-w-0 flex-1 flex-col bg-[#16171b]/95 text-zinc-100">
+    <div className="flex min-h-0 min-w-0 flex-1 flex-col bg-white/[0.02] text-zinc-100">
       <header
         data-tauri-drag-region
         className="flex h-12 shrink-0 items-center justify-between gap-2 border-b border-white/[0.06] px-3.5"
@@ -346,6 +351,31 @@ export function DockPanel({
                 >
                   {dock.alwaysOnTop ? "Ativo" : "Desativado"}
                 </button>
+              </div>
+
+              <div className="flex flex-col gap-1.5 border-t border-white/[0.06] pt-2.5">
+                <div className="flex items-center justify-between">
+                  <label htmlFor="dock-opacity-slider" className="text-[12px] text-zinc-200">
+                    Opacidade do dock
+                  </label>
+                  <span className="tabular-nums font-mono text-[11px] text-emerald-300">
+                    {dockOpacity}%
+                  </span>
+                </div>
+                <input
+                  id="dock-opacity-slider"
+                  type="range"
+                  min={40}
+                  max={100}
+                  step={1}
+                  value={dockOpacity}
+                  aria-label="Opacidade do dock"
+                  onChange={(e) => onOpacityChange(Number(e.target.value))}
+                  style={{
+                    background: `linear-gradient(to right, rgba(52, 211, 153, 0.75) ${opacityProgress}%, rgba(255, 255, 255, 0.1) ${opacityProgress}%)`,
+                  }}
+                  className="dock-range h-1.5 w-full cursor-pointer appearance-none rounded-full focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/50"
+                />
               </div>
 
               <div className="flex items-center justify-between border-t border-white/[0.06] pt-2 text-[11px] text-zinc-400">
