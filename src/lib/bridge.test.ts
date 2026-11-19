@@ -297,6 +297,88 @@ describe("bridge (modo Tauri IPC)", () => {
     expect(invokeMock).toHaveBeenLastCalledWith("get_active_profile");
   });
 
+  it("executa fallbacks em memória de integrações externas no modo web", async () => {
+    const bridge = await import("./bridge");
+    bridge.resetMockStore();
+
+    const deals = await bridge.searchPipedriveDeals("acme");
+    expect(deals).toEqual([
+      { id: 101, title: "Expansão Enterprise Q4", orgName: "Acme Corp" },
+    ]);
+    await expect(bridge.searchPipedriveDeals("   ")).resolves.toEqual([]);
+
+    await expect(
+      bridge.sendToPipedrive({ noteId: "inexistente", type: "note", dealId: 101 })
+    ).rejects.toThrow("Nota não encontrada");
+
+    const note = await bridge.saveNoteDraft({
+      id: "note-int",
+      title: "Alinhamento Acme",
+      contentMd: "Resumo",
+    });
+
+    const pipeRes = await bridge.sendToPipedrive({
+      noteId: note.id,
+      type: "activity",
+      dealId: 101,
+    });
+    expect(pipeRes.status).toBe("sent");
+    expect(pipeRes.logId).toBeTruthy();
+
+    const n8nRes = await bridge.triggerN8nWebhook({
+      noteId: note.id,
+      webhookKey: "pos-call",
+    });
+    expect(n8nRes.status).toBe("sent");
+    expect(n8nRes.message).toContain("pos-call");
+
+    const firstSync = await bridge.syncSupabase();
+    expect(firstSync).toEqual({ syncedNotes: 1, syncedLogs: 2 });
+
+    const secondSync = await bridge.syncSupabase();
+    expect(secondSync).toEqual({ syncedNotes: 0, syncedLogs: 0 });
+  });
+
+  it("encaminha comandos IPC de integrações com parâmetros corretos no modo Tauri", async () => {
+    setTauriInternals(true);
+    const bridge = await import("./bridge");
+
+    invokeMock.mockResolvedValueOnce([{ id: 10, title: "Deal X" }]);
+    await expect(bridge.searchPipedriveDeals("Deal")).resolves.toEqual([
+      { id: 10, title: "Deal X" },
+    ]);
+    expect(invokeMock).toHaveBeenLastCalledWith("search_pipedrive_deals", {
+      query: "Deal",
+    });
+
+    const dispatch = { logId: "l-1", status: "sent" as const, message: "ok" };
+    invokeMock.mockResolvedValueOnce(dispatch);
+    await expect(
+      bridge.sendToPipedrive({ noteId: "n-1", type: "note", dealId: 42 })
+    ).resolves.toEqual(dispatch);
+    expect(invokeMock).toHaveBeenLastCalledWith("send_to_pipedrive", {
+      noteId: "n-1",
+      kind: "note",
+      dealId: 42,
+    });
+
+    invokeMock.mockResolvedValueOnce(dispatch);
+    await expect(
+      bridge.triggerN8nWebhook({ noteId: "n-1", webhookKey: "k1" })
+    ).resolves.toEqual(dispatch);
+    expect(invokeMock).toHaveBeenLastCalledWith("trigger_n8n_webhook", {
+      noteId: "n-1",
+      webhookKey: "k1",
+    });
+
+    invokeMock.mockResolvedValueOnce({ syncedNotes: 2, syncedLogs: 3 });
+    await expect(bridge.syncSupabase()).resolves.toEqual({
+      syncedNotes: 2,
+      syncedLogs: 3,
+    });
+    expect(invokeMock).toHaveBeenLastCalledWith("sync_supabase");
+  });
+
   it("propaga rejeição do backend Rust quando invoke falha", async () => {
     setTauriInternals(true);
     const bridge = await import("./bridge");

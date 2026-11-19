@@ -36,9 +36,9 @@ quicknote-crm/
         ├── main.rs
         ├── lib.rs
         ├── dock.rs             # Encaixe nas bordas (right/left/top), recolher/expandir, drag-snap, tray e atalhos
-        ├── db.rs               # Conexão SQLite (WAL + FKs) e CRUD de notes, todos e cs_profile
+        ├── db.rs               # Conexão SQLite (WAL + FKs), CRUD de notes/todos/cs_profile e helpers de integration_logs
         ├── commands.rs         # Comandos #[tauri::command] expostos ao frontend
-        └── integrations/       # Próximo marco (Pipedrive, n8n, Supabase)
+        └── integrations/       # Infra HTTP (reqwest + dotenvy) e contratos Pipedrive, n8n, Supabase
             ├── mod.rs
             ├── pipedrive.rs
             ├── n8n.rs
