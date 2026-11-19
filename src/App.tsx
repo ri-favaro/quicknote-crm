@@ -52,7 +52,7 @@ export default function App() {
   const handleExpand = useCallback(async (expanded: boolean) => {
     try {
       const next = await setDockExpanded(expanded);
-      setDock((prev) => ({ ...prev, ...next, expanded }));
+      setDock(next);
       setStatusNotice(null);
     } catch (err) {
       setStatusNotice(String(err));
@@ -63,7 +63,7 @@ export default function App() {
     setContextMenu(null);
     try {
       const next = await setDockEdge(edge);
-      setDock((prev) => ({ ...prev, ...next, edge }));
+      setDock(next);
       setStatusNotice(null);
     } catch (err) {
       setStatusNotice(String(err));
@@ -73,7 +73,7 @@ export default function App() {
   const handleTogglePin = useCallback(async () => {
     try {
       const next = await setAlwaysOnTop(!dock.alwaysOnTop);
-      setDock((prev) => ({ ...prev, ...next, alwaysOnTop: !prev.alwaysOnTop }));
+      setDock(next);
       setStatusNotice(null);
     } catch (err) {
       setStatusNotice(String(err));
@@ -132,6 +132,9 @@ export default function App() {
     [dock.expanded, handleExpand]
   );
 
+  const handleNewNoteRef = useRef(handleNewNote);
+  handleNewNoteRef.current = handleNewNote;
+
   useEffect(() => {
     let active = true;
     getDockState()
@@ -144,14 +147,22 @@ export default function App() {
     let unlistenState: (() => void) | undefined;
 
     onDockNewNote(() => {
-      void handleNewNote();
+      void handleNewNoteRef.current();
     }).then((fn) => {
+      if (!active) {
+        fn();
+        return;
+      }
       unlistenNewNote = fn;
     });
 
     onDockStateChanged((state) => {
       if (active) setDock(state);
     }).then((fn) => {
+      if (!active) {
+        fn();
+        return;
+      }
       unlistenState = fn;
     });
 
@@ -160,7 +171,7 @@ export default function App() {
       unlistenNewNote?.();
       unlistenState?.();
     };
-  }, [handleNewNote]);
+  }, []);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {

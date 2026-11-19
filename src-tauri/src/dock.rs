@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 use std::sync::{
-    atomic::{AtomicU64, Ordering},
+    atomic::{AtomicBool, Ordering},
     Mutex,
 };
 use std::time::{Duration, Instant};
@@ -65,16 +65,19 @@ impl Default for DockState {
 
 pub struct DockManager {
     state: Mutex<DockState>,
-    move_seq: AtomicU64,
+    snap_scheduled: AtomicBool,
+    last_move_at: Mutex<Instant>,
     ignore_moves_until: Mutex<Instant>,
 }
 
 impl DockManager {
     pub fn new() -> Self {
+        let now = Instant::now();
         Self {
             state: Mutex::new(DockState::default()),
-            move_seq: AtomicU64::new(0),
-            ignore_moves_until: Mutex::new(Instant::now()),
+            snap_scheduled: AtomicBool::new(false),
+            last_move_at: Mutex::new(now),
+            ignore_moves_until: Mutex::new(now),
         }
     }
 
@@ -91,6 +94,9 @@ impl DockManager {
     pub fn set_expanded(&self, expanded: bool) -> DockState {
         let mut guard = self.state.lock().expect("dock state poisoned");
         guard.expanded = expanded;
+        if expanded {
+            guard.visible = true;
+        }
         guard.clone()
     }
 
@@ -107,7 +113,6 @@ impl DockManager {
     }
 
     fn suppress_move_events(&self) {
-        self.move_seq.fetch_add(1, Ordering::SeqCst);
         let mut guard = self
             .ignore_moves_until
             .lock()
@@ -123,12 +128,24 @@ impl DockManager {
         Instant::now() < *guard
     }
 
-    fn bump_move_seq(&self) -> u64 {
-        self.move_seq.fetch_add(1, Ordering::SeqCst) + 1
+    fn record_user_move(&self) -> bool {
+        {
+            let mut guard = self.last_move_at.lock().expect("last_move_at poisoned");
+            *guard = Instant::now();
+        }
+        self.snap_scheduled
+            .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
+            .is_ok()
     }
 
-    fn current_move_seq(&self) -> u64 {
-        self.move_seq.load(Ordering::SeqCst)
+    fn remaining_debounce(&self) -> Option<Duration> {
+        let last = *self.last_move_at.lock().expect("last_move_at poisoned");
+        let target = last + Duration::from_millis(DRAG_SNAP_DEBOUNCE_MS);
+        target.checked_duration_since(Instant::now())
+    }
+
+    fn clear_snap_scheduled(&self) {
+        self.snap_scheduled.store(false, Ordering::SeqCst);
     }
 }
 
@@ -209,7 +226,8 @@ pub fn apply_window_geometry(
 ) -> Result<(), String> {
     let monitor = window
         .current_monitor()
-        .map_err(|e| e.to_string())?
+        .ok()
+        .flatten()
         .or_else(|| window.primary_monitor().ok().flatten())
         .ok_or_else(|| "Nenhum monitor detectado".to_string())?;
 
@@ -322,22 +340,40 @@ pub fn handle_window_moved(app: &AppHandle) {
         return;
     }
 
-    let seq = manager.bump_move_seq();
-    let app_handle = app.clone();
+    if !manager.record_user_move() {
+        return;
+    }
 
+    let app_handle = app.clone();
     std::thread::spawn(move || {
-        std::thread::sleep(Duration::from_millis(DRAG_SNAP_DEBOUNCE_MS));
-        let manager = app_handle.state::<DockManager>();
-        if manager.current_move_seq() != seq || manager.is_ignoring_moves() {
+        loop {
+            let remaining = {
+                let manager = app_handle.state::<DockManager>();
+                manager.remaining_debounce()
+            };
+            match remaining {
+                Some(wait) => std::thread::sleep(wait),
+                None => break,
+            }
+        }
+
+        let should_snap = {
+            let manager = app_handle.state::<DockManager>();
+            manager.clear_snap_scheduled();
+            !manager.is_ignoring_moves()
+        };
+        if !should_snap {
             return;
         }
 
         let Some(window) = app_handle.get_webview_window(MAIN_WINDOW_LABEL) else {
             return;
         };
-        let Ok(Some(monitor)) = window
+        let Some(monitor) = window
             .current_monitor()
-            .or_else(|_| window.primary_monitor())
+            .ok()
+            .flatten()
+            .or_else(|| window.primary_monitor().ok().flatten())
         else {
             return;
         };

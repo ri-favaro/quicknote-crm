@@ -51,10 +51,10 @@ interface DockPanelProps {
   onRemoveTodo: (id: string) => void;
 }
 
-const EDGE_OPTIONS: { id: DockEdge; label: string }[] = [
-  { id: "left", label: "Esquerda" },
-  { id: "top", label: "Topo" },
-  { id: "right", label: "Direita" },
+const EDGE_OPTIONS: { id: DockEdge; label: string; tooltip: string }[] = [
+  { id: "left", label: "Esquerda", tooltip: "Encaixar na esquerda" },
+  { id: "top", label: "Topo", tooltip: "Encaixar no topo" },
+  { id: "right", label: "Direita", tooltip: "Encaixar na direita" },
 ];
 
 const TAB_TITLES: Record<DockTab, string> = {
@@ -148,6 +148,8 @@ export function DockPanel({
             type="button"
             onClick={onTogglePin}
             title={dock.alwaysOnTop ? "Desafixar do topo" : "Manter sempre visível"}
+            aria-label={dock.alwaysOnTop ? "Desafixar do topo" : "Manter sempre visível"}
+            aria-pressed={dock.alwaysOnTop}
             className={`flex h-7 w-7 items-center justify-center rounded-[9px] transition-[background-color,color] duration-150 cursor-pointer ${
               dock.alwaysOnTop
                 ? "bg-emerald-500/15 text-emerald-300"
@@ -165,6 +167,7 @@ export function DockPanel({
             type="button"
             onClick={onCollapse}
             title="Recolher para a barra minimalista (Esc)"
+            aria-label="Recolher para a barra minimalista"
             className="flex h-7 w-7 items-center justify-center rounded-[9px] text-zinc-400 transition-[background-color,color] duration-150 hover:bg-white/[0.06] hover:text-zinc-100 cursor-pointer"
           >
             <CollapseIcon edge={dock.edge} className="h-4 w-4" />
@@ -285,7 +288,7 @@ export function DockPanel({
                       type="button"
                       onClick={() => onRemoveTodo(todo.id)}
                       aria-label="Remover tarefa"
-                      className="flex h-6 w-6 items-center justify-center rounded-md text-zinc-600 opacity-0 transition-opacity duration-150 hover:bg-white/[0.06] hover:text-zinc-300 group-hover:opacity-100 cursor-pointer"
+                      className="flex h-6 w-6 items-center justify-center rounded-md text-zinc-600 opacity-0 transition-opacity duration-150 hover:bg-white/[0.06] hover:text-zinc-300 group-hover:opacity-100 focus-visible:opacity-100 cursor-pointer"
                     >
                       <Trash2 className="h-3.5 w-3.5" />
                     </button>
