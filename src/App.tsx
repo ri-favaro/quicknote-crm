@@ -47,7 +47,13 @@ export default function App() {
   const stateVersionRef = useRef(0);
 
   const focusNoteBody = useCallback(() => {
-    setTimeout(() => noteBodyRef.current?.focus(), 40);
+    setTimeout(() => {
+      const active = document.activeElement;
+      if (active instanceof HTMLInputElement || active instanceof HTMLTextAreaElement) {
+        return;
+      }
+      noteBodyRef.current?.focus();
+    }, 40);
   }, []);
 
   const handleExpand = useCallback(async (expanded: boolean) => {
