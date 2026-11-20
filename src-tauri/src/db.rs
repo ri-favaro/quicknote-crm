@@ -1,6 +1,7 @@
 use chrono::{DateTime, NaiveDate, SecondsFormat, Utc};
 use rusqlite::{params, Connection, OptionalExtension, Row};
 use serde::{Deserialize, Serialize};
+use std::fmt;
 use std::fs;
 use std::path::Path;
 use std::sync::{Mutex, MutexGuard};
@@ -208,6 +209,85 @@ pub struct SetActiveProfileInput {
     pub token: Option<String>,
     #[serde(default)]
     pub clear_token: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct IntegrationSettings {
+    pub pipedrive_api_base: String,
+    pub has_pipedrive_token: bool,
+    pub n8n_webhook_url: String,
+    pub has_n8n_secret: bool,
+    pub supabase_url: String,
+    pub has_supabase_key: bool,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SetIntegrationSettingsInput {
+    #[serde(default)]
+    pub pipedrive_api_base: Option<String>,
+    #[serde(default)]
+    pub pipedrive_api_token: Option<String>,
+    #[serde(default)]
+    pub clear_pipedrive_token: bool,
+    #[serde(default)]
+    pub n8n_webhook_url: Option<String>,
+    #[serde(default)]
+    pub n8n_webhook_secret: Option<String>,
+    #[serde(default)]
+    pub clear_n8n_secret: bool,
+    #[serde(default)]
+    pub supabase_url: Option<String>,
+    #[serde(default)]
+    pub supabase_anon_key: Option<String>,
+    #[serde(default)]
+    pub clear_supabase_key: bool,
+}
+
+#[derive(Clone, Default, PartialEq, Eq)]
+pub struct StoredIntegrationConfig {
+    pub pipedrive_api_base: Option<String>,
+    pub pipedrive_api_token: Option<String>,
+    pub n8n_webhook_url: Option<String>,
+    pub n8n_webhook_secret: Option<String>,
+    pub supabase_url: Option<String>,
+    pub supabase_anon_key: Option<String>,
+}
+
+impl fmt::Debug for StoredIntegrationConfig {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("StoredIntegrationConfig")
+            .field("pipedrive_api_base", &self.pipedrive_api_base)
+            .field(
+                "pipedrive_api_token",
+                &self.pipedrive_api_token.as_ref().map(|_| "[REDACTED]"),
+            )
+            .field("n8n_webhook_url", &self.n8n_webhook_url)
+            .field(
+                "n8n_webhook_secret",
+                &self.n8n_webhook_secret.as_ref().map(|_| "[REDACTED]"),
+            )
+            .field("supabase_url", &self.supabase_url)
+            .field(
+                "supabase_anon_key",
+                &self.supabase_anon_key.as_ref().map(|_| "[REDACTED]"),
+            )
+            .finish()
+    }
+}
+
+impl StoredIntegrationConfig {
+    pub fn to_public_settings(&self) -> IntegrationSettings {
+        IntegrationSettings {
+            pipedrive_api_base: self.pipedrive_api_base.clone().unwrap_or_default(),
+            has_pipedrive_token: self.pipedrive_api_token.is_some(),
+            n8n_webhook_url: self.n8n_webhook_url.clone().unwrap_or_default(),
+            has_n8n_secret: self.n8n_webhook_secret.is_some(),
+            supabase_url: self.supabase_url.clone().unwrap_or_default(),
+            has_supabase_key: self.supabase_anon_key.is_some(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -451,6 +531,93 @@ impl Database {
             has_token: !next_token.is_empty(),
             is_configured: true,
         })
+    }
+
+    pub fn get_integration_settings(&self) -> Result<IntegrationSettings, String> {
+        let conn = self.lock_conn()?;
+        Ok(read_stored_integration_config(&conn)?.to_public_settings())
+    }
+
+    pub fn load_integration_config(&self) -> Result<StoredIntegrationConfig, String> {
+        let conn = self.lock_conn()?;
+        read_stored_integration_config(&conn)
+    }
+
+    pub fn set_integration_settings(
+        &self,
+        input: SetIntegrationSettingsInput,
+    ) -> Result<IntegrationSettings, String> {
+        let conn = self.lock_conn()?;
+        let current = read_stored_integration_config(&conn)?;
+
+        let pipedrive_api_base = match input.pipedrive_api_base {
+            Some(raw) => normalize_optional_url(&raw, "URL base do Pipedrive")?,
+            None => current.pipedrive_api_base,
+        };
+        let pipedrive_api_token = resolve_next_secret(
+            input.clear_pipedrive_token,
+            input.pipedrive_api_token.as_deref(),
+            current.pipedrive_api_token,
+        );
+
+        let n8n_webhook_url = match input.n8n_webhook_url {
+            Some(raw) => normalize_optional_url(&raw, "URL do webhook n8n")?,
+            None => current.n8n_webhook_url,
+        };
+        let n8n_webhook_secret = resolve_next_secret(
+            input.clear_n8n_secret,
+            input.n8n_webhook_secret.as_deref(),
+            current.n8n_webhook_secret,
+        );
+
+        let supabase_url = match input.supabase_url {
+            Some(raw) => normalize_optional_url(&raw, "URL do projeto Supabase")?,
+            None => current.supabase_url,
+        };
+        let supabase_anon_key = resolve_next_secret(
+            input.clear_supabase_key,
+            input.supabase_anon_key.as_deref(),
+            current.supabase_anon_key,
+        );
+
+        let updated_at = now_iso();
+        conn.execute(
+            "INSERT INTO integration_settings (
+                singleton,
+                pipedrive_api_base, pipedrive_api_token,
+                n8n_webhook_url, n8n_webhook_secret,
+                supabase_url, supabase_anon_key,
+                updated_at
+             ) VALUES (1, ?1, ?2, ?3, ?4, ?5, ?6, ?7)
+             ON CONFLICT(singleton) DO UPDATE SET
+                pipedrive_api_base = excluded.pipedrive_api_base,
+                pipedrive_api_token = excluded.pipedrive_api_token,
+                n8n_webhook_url = excluded.n8n_webhook_url,
+                n8n_webhook_secret = excluded.n8n_webhook_secret,
+                supabase_url = excluded.supabase_url,
+                supabase_anon_key = excluded.supabase_anon_key,
+                updated_at = excluded.updated_at",
+            params![
+                pipedrive_api_base.as_deref().unwrap_or(""),
+                pipedrive_api_token.as_deref().unwrap_or(""),
+                n8n_webhook_url.as_deref().unwrap_or(""),
+                n8n_webhook_secret.as_deref().unwrap_or(""),
+                supabase_url.as_deref().unwrap_or(""),
+                supabase_anon_key.as_deref().unwrap_or(""),
+                updated_at,
+            ],
+        )
+        .map_err(|e| format!("Falha ao salvar configurações de integrações: {e}"))?;
+
+        let next = StoredIntegrationConfig {
+            pipedrive_api_base,
+            pipedrive_api_token,
+            n8n_webhook_url,
+            n8n_webhook_secret,
+            supabase_url,
+            supabase_anon_key,
+        };
+        Ok(next.to_public_settings())
     }
 
     pub fn save_note_draft(&self, input: SaveNoteDraftInput) -> Result<Note, String> {
@@ -938,9 +1105,102 @@ fn init_schema(conn: &Connection) -> Result<(), String> {
             collapsed_opacity INTEGER NOT NULL CHECK (collapsed_opacity BETWEEN 40 AND 100),
             panel_size TEXT NOT NULL CHECK (panel_size IN ('compact', 'default', 'wide')),
             updated_at TEXT NOT NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS integration_settings (
+            singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
+            pipedrive_api_base TEXT NOT NULL DEFAULT '',
+            pipedrive_api_token TEXT NOT NULL DEFAULT '',
+            n8n_webhook_url TEXT NOT NULL DEFAULT '',
+            n8n_webhook_secret TEXT NOT NULL DEFAULT '',
+            supabase_url TEXT NOT NULL DEFAULT '',
+            supabase_anon_key TEXT NOT NULL DEFAULT '',
+            updated_at TEXT NOT NULL
         );",
     )
     .map_err(|e| format!("Falha ao inicializar schema SQLite: {e}"))
+}
+
+fn read_stored_integration_config(conn: &Connection) -> Result<StoredIntegrationConfig, String> {
+    let row = conn
+        .query_row(
+            "SELECT pipedrive_api_base, pipedrive_api_token,
+                    n8n_webhook_url, n8n_webhook_secret,
+                    supabase_url, supabase_anon_key
+             FROM integration_settings
+             WHERE singleton = 1",
+            [],
+            |r| {
+                Ok((
+                    r.get::<_, String>(0)?,
+                    r.get::<_, String>(1)?,
+                    r.get::<_, String>(2)?,
+                    r.get::<_, String>(3)?,
+                    r.get::<_, String>(4)?,
+                    r.get::<_, String>(5)?,
+                ))
+            },
+        )
+        .optional()
+        .map_err(|e| format!("Falha ao ler configurações de integrações: {e}"))?;
+
+    match row {
+        Some((
+            pipedrive_api_base,
+            pipedrive_api_token,
+            n8n_webhook_url,
+            n8n_webhook_secret,
+            supabase_url,
+            supabase_anon_key,
+        )) => Ok(StoredIntegrationConfig {
+            pipedrive_api_base: normalize_non_empty(pipedrive_api_base),
+            pipedrive_api_token: normalize_non_empty(pipedrive_api_token),
+            n8n_webhook_url: normalize_non_empty(n8n_webhook_url),
+            n8n_webhook_secret: normalize_non_empty(n8n_webhook_secret),
+            supabase_url: normalize_non_empty(supabase_url),
+            supabase_anon_key: normalize_non_empty(supabase_anon_key),
+        }),
+        None => Ok(StoredIntegrationConfig::default()),
+    }
+}
+
+fn normalize_non_empty(raw: String) -> Option<String> {
+    let trimmed = raw.trim();
+    if trimmed.is_empty() {
+        None
+    } else {
+        Some(trimmed.to_string())
+    }
+}
+
+fn normalize_optional_url(raw: &str, label: &str) -> Result<Option<String>, String> {
+    let trimmed = raw.trim();
+    if trimmed.is_empty() {
+        return Ok(None);
+    }
+    if trimmed.chars().any(char::is_whitespace)
+        || !(trimmed.starts_with("https://") || trimmed.starts_with("http://"))
+    {
+        return Err(format!("{label} inválida. Use uma URL http:// ou https://."));
+    }
+    Ok(Some(trimmed.trim_end_matches('/').to_string()))
+}
+
+fn resolve_next_secret(
+    clear: bool,
+    incoming: Option<&str>,
+    existing: Option<String>,
+) -> Option<String> {
+    if clear {
+        return None;
+    }
+    if let Some(raw) = incoming {
+        let trimmed = raw.trim();
+        if !trimmed.is_empty() {
+            return Some(trimmed.to_string());
+        }
+    }
+    existing
 }
 
 fn read_dock_appearance(conn: &Connection) -> Result<DockAppearance, String> {
@@ -1775,6 +2035,96 @@ mod tests {
                 reopened.get_dock_appearance().unwrap(),
                 DockAppearance::default()
             );
+        }
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn integration_settings_write_only_persist_and_clear_across_reopen() {
+        let dir = std::env::temp_dir().join(format!("quicknote-crm-int-{}", Uuid::new_v4()));
+        let db_file: PathBuf = dir.join("quicknote.db");
+
+        {
+            let db = Database::open(&db_file).expect("open db");
+            assert_eq!(
+                db.get_integration_settings().unwrap(),
+                IntegrationSettings::default()
+            );
+
+            let invalid_url = db.set_integration_settings(SetIntegrationSettingsInput {
+                pipedrive_api_base: Some("ftp://invalida".to_string()),
+                ..Default::default()
+            });
+            assert!(invalid_url.unwrap_err().contains("URL base do Pipedrive"));
+
+            let saved = db
+                .set_integration_settings(SetIntegrationSettingsInput {
+                    pipedrive_api_base: Some(" https://api.pipedrive.com/v1/ ".to_string()),
+                    pipedrive_api_token: Some("secret-pd-123".to_string()),
+                    n8n_webhook_url: Some("https://n8n.example.com/webhook/cs".to_string()),
+                    n8n_webhook_secret: Some("secret-n8n-456".to_string()),
+                    supabase_url: Some("https://proj.supabase.co/".to_string()),
+                    supabase_anon_key: Some("secret-supa-789".to_string()),
+                    ..Default::default()
+                })
+                .unwrap();
+
+            assert_eq!(saved.pipedrive_api_base, "https://api.pipedrive.com/v1");
+            assert!(saved.has_pipedrive_token);
+            assert_eq!(saved.n8n_webhook_url, "https://n8n.example.com/webhook/cs");
+            assert!(saved.has_n8n_secret);
+            assert_eq!(saved.supabase_url, "https://proj.supabase.co");
+            assert!(saved.has_supabase_key);
+
+            let serialized = serde_json::to_string(&saved).unwrap();
+            assert!(!serialized.contains("secret-pd-123"));
+            assert!(!serialized.contains("secret-n8n-456"));
+            assert!(!serialized.contains("secret-supa-789"));
+
+            let preserved = db
+                .set_integration_settings(SetIntegrationSettingsInput {
+                    n8n_webhook_url: Some("https://n8n.example.com/webhook/v2".to_string()),
+                    pipedrive_api_token: Some("   ".to_string()),
+                    ..Default::default()
+                })
+                .unwrap();
+            assert_eq!(preserved.pipedrive_api_base, "https://api.pipedrive.com/v1");
+            assert!(preserved.has_pipedrive_token);
+            assert_eq!(preserved.n8n_webhook_url, "https://n8n.example.com/webhook/v2");
+            assert!(preserved.has_n8n_secret);
+            assert!(preserved.has_supabase_key);
+
+            let cleared = db
+                .set_integration_settings(SetIntegrationSettingsInput {
+                    clear_n8n_secret: true,
+                    ..Default::default()
+                })
+                .unwrap();
+            assert!(cleared.has_pipedrive_token);
+            assert!(!cleared.has_n8n_secret);
+            assert!(cleared.has_supabase_key);
+        }
+
+        {
+            let reopened = Database::open(&db_file).expect("reopen db");
+            let loaded = reopened.get_integration_settings().unwrap();
+            assert_eq!(loaded.pipedrive_api_base, "https://api.pipedrive.com/v1");
+            assert!(loaded.has_pipedrive_token);
+            assert_eq!(loaded.n8n_webhook_url, "https://n8n.example.com/webhook/v2");
+            assert!(!loaded.has_n8n_secret);
+            assert_eq!(loaded.supabase_url, "https://proj.supabase.co");
+            assert!(loaded.has_supabase_key);
+
+            let stored = reopened.load_integration_config().unwrap();
+            assert_eq!(stored.pipedrive_api_token.as_deref(), Some("secret-pd-123"));
+            assert_eq!(stored.n8n_webhook_secret, None);
+            assert_eq!(stored.supabase_anon_key.as_deref(), Some("secret-supa-789"));
+
+            let debug_str = format!("{stored:?}");
+            assert!(!debug_str.contains("secret-pd-123"));
+            assert!(!debug_str.contains("secret-supa-789"));
+            assert!(debug_str.contains("[REDACTED]"));
         }
 
         let _ = fs::remove_dir_all(&dir);

@@ -80,7 +80,8 @@ pub async fn search_deals(
         return Err("Informe um termo de busca para consultar negócios no Pipedrive.".to_string());
     }
 
-    let (base, token) = client.config().pipedrive_credentials()?;
+    let config = client.config();
+    let (base, token) = config.pipedrive_credentials()?;
     let url = format!("{}/deals/search", base.trim_end_matches('/'));
 
     let response = client
@@ -133,7 +134,8 @@ pub async fn send_note_or_activity(
         .get_note(trimmed_note_id)?
         .ok_or_else(|| "Nota não encontrada no banco local.".to_string())?;
 
-    let (base, token) = client.config().pipedrive_credentials()?;
+    let config = client.config();
+    let (base, token) = config.pipedrive_credentials()?;
 
     match parsed_kind {
         PipedriveSendKind::Note => dispatch_note(db, client, base, token, &note, deal_id).await,

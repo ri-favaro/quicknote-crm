@@ -2,7 +2,8 @@ use crate::db::Database;
 use crate::integrations::{IntegrationClient, SyncResult};
 
 pub async fn sync(db: &Database, client: &IntegrationClient) -> Result<SyncResult, String> {
-    let _ = client.config().supabase_credentials()?;
+    let config = client.config();
+    let _ = config.supabase_credentials()?;
     let _ = client.http();
 
     let pending_notes = db.list_pending_sync_notes()?.len();

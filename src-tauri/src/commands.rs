@@ -1,8 +1,9 @@
 use tauri::{AppHandle, Manager, State};
 
 use crate::db::{
-    ActiveProfile, Database, DockAppearance, Note, SaveNoteDraftInput, SetActiveProfileInput, Todo,
-    UpdateDockAppearanceInput, UpsertTodoInput,
+    ActiveProfile, Database, DockAppearance, IntegrationSettings, Note, SaveNoteDraftInput,
+    SetActiveProfileInput, SetIntegrationSettingsInput, Todo, UpdateDockAppearanceInput,
+    UpsertTodoInput,
 };
 use crate::dock::{
     apply_edge, apply_expanded, apply_panel_size, emit_state, hide_window, toggle_expanded,
@@ -127,6 +128,22 @@ pub fn set_active_profile(
 #[tauri::command]
 pub fn get_active_profile(db: State<'_, Database>) -> Result<ActiveProfile, String> {
     db.get_active_profile()
+}
+
+#[tauri::command]
+pub fn get_integration_settings(db: State<'_, Database>) -> Result<IntegrationSettings, String> {
+    db.get_integration_settings()
+}
+
+#[tauri::command]
+pub fn set_integration_settings(
+    db: State<'_, Database>,
+    integrations: State<'_, IntegrationClient>,
+    settings: SetIntegrationSettingsInput,
+) -> Result<IntegrationSettings, String> {
+    let saved = db.set_integration_settings(settings)?;
+    integrations.refresh_from_db(&db)?;
+    Ok(saved)
 }
 
 #[tauri::command]

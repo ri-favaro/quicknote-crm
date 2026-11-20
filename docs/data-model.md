@@ -61,6 +61,18 @@ O backend Rust inicializa o arquivo `quicknote.db` em `app_data_dir` com `PRAGMA
 | `panel_size` | `TEXT` (`'compact' \| 'default' \| 'wide'`) | Preset de largura do painel expandido |
 | `updated_at` | `TEXT (ISO-8601)` | Última atualização de aparência |
 
+### `integration_settings` (apenas SQLite local)
+| Coluna | Tipo | Descrição |
+| :--- | :--- | :--- |
+| `singleton` | `INTEGER (PK CHECK (singleton = 1))` | Garante registro único de configuração local das integrações |
+| `pipedrive_api_base` | `TEXT` | URL base da API Pipedrive (ex.: `https://api.pipedrive.com/v1`) |
+| `pipedrive_api_token` | `TEXT` | Token write-only do Pipedrive (nunca retornado ao frontend) |
+| `n8n_webhook_url` | `TEXT` | URL do webhook n8n |
+| `n8n_webhook_secret` | `TEXT` | Secret write-only opcional do header `X-Webhook-Secret` |
+| `supabase_url` | `TEXT` | URL do projeto Supabase |
+| `supabase_anon_key` | `TEXT` | Chave write-only do Supabase (nunca retornada ao frontend) |
+| `updated_at` | `TEXT (ISO-8601)` | Última atualização das configurações |
+
 ---
 
 ## 2. Contrato `src/lib/bridge.ts` (Frontend -> Rust)
@@ -98,6 +110,27 @@ export interface SetActiveProfileInput {
   authorName: string;
   token?: string;
   clearToken?: boolean;
+}
+
+export interface IntegrationSettings {
+  pipedriveApiBase: string;
+  hasPipedriveToken: boolean;
+  n8nWebhookUrl: string;
+  hasN8nSecret: boolean;
+  supabaseUrl: string;
+  hasSupabaseKey: boolean;
+}
+
+export interface SetIntegrationSettingsInput {
+  pipedriveApiBase?: string;
+  pipedriveApiToken?: string;
+  clearPipedriveToken?: boolean;
+  n8nWebhookUrl?: string;
+  n8nWebhookSecret?: string;
+  clearN8nSecret?: boolean;
+  supabaseUrl?: string;
+  supabaseAnonKey?: string;
+  clearSupabaseKey?: boolean;
 }
 
 export interface Note {
@@ -204,6 +237,8 @@ export interface SyncResult {
 | `delete_todo` | `{ id: string }` | Remove a tarefa por ID. |
 | `set_active_profile` | `{ profile: SetActiveProfileInput }` | Salva `authorId`, `authorName` e opcionalmente atualiza ou limpa `token` no SQLite; retorna `ActiveProfile` sem o token bruto. |
 | `get_active_profile` | — | Retorna o perfil salvo (`isConfigured: true`) ou fallback (`local-cs` / `CS Local`, `isConfigured: false`) sem expor `token`. |
+| `get_integration_settings` | — | Retorna URLs/bases salvas em `integration_settings` e flags booleanas `hasPipedriveToken`, `hasN8nSecret` e `hasSupabaseKey` sem expor segredos. |
+| `set_integration_settings` | `{ settings: SetIntegrationSettingsInput }` | Valida URLs, persiste ou limpa segredos write-only em `integration_settings` e atualiza o `IntegrationClient` em runtime (priorizando SQLite sobre fallback de `.env`). |
 | `get_dock_appearance` | — | Retorna preferências visuais salvas em `dock_appearance` ou valores padrão (`dark`, `violet`, `100%`, `100%`, `default`). |
 | `set_dock_appearance` | `{ appearance: UpdateDockAppearanceInput }` | Persiste patch parcial em `dock_appearance` com clamp de opacidade (`40..100`) e redimensiona imediatamente a janela expandida quando `panelSize` muda. |
 | `reset_dock_appearance` | — | Remove customizações de `dock_appearance`, restaura padrões originais e reaplica largura padrão na janela expandida. |
