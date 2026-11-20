@@ -2,8 +2,10 @@
 
 Todas as integrações são executadas exclusivamente pelo backend Rust (`reqwest`) e registram o resultado em `integration_logs`.
 
-## 1. Variáveis de Ambiente (MVP)
-Criar `.env.example` quando o scaffold iniciar (nunca commitar `.env`):
+## 1. Configuração Local (UI + SQLite) e Fallback de Variáveis de Ambiente
+As URLs e credenciais das integrações são configuráveis diretamente pela aba **Ajustes** do app e persistidas na tabela singleton `integration_settings` em `quicknote.db`. Tokens e segredos seguem o padrão **write-only** no backend Rust e nunca retornam ao frontend React.
+
+Em runtime, o backend prioriza os valores salvos no SQLite local e faz fallback opcional para variáveis de ambiente (`.env`, para desenvolvimento; nunca commitar `.env`):
 - `PIPEDRIVE_API_BASE` — ex: `https://api.pipedrive.com/v1`
 - `PIPEDRIVE_API_TOKEN` — token da conta Pipedrive
 - `N8N_WEBHOOK_URL` — URL do webhook de entrada no n8n

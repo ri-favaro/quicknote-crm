@@ -473,6 +473,69 @@ describe("bridge (modo Tauri IPC)", () => {
     expect(fromRust).toEqual(updated);
   });
 
+  it("gerencia configurações de integrações write-only no mock e via IPC Tauri", async () => {
+    const bridge = await import("./bridge");
+    bridge.resetMockStore();
+
+    expect(await bridge.getIntegrationSettings()).toEqual(
+      bridge.DEFAULT_INTEGRATION_SETTINGS
+    );
+
+    await expect(
+      bridge.setIntegrationSettings({ pipedriveApiBase: "ftp://invalida" })
+    ).rejects.toThrow("URL base do Pipedrive");
+
+    await expect(
+      bridge.setIntegrationSettings({ pipedriveApiBase: "https://" })
+    ).rejects.toThrow("URL base do Pipedrive");
+
+    await expect(
+      bridge.setIntegrationSettings({ n8nWebhookUrl: "http:///" })
+    ).rejects.toThrow("URL do webhook n8n");
+
+    const saved = await bridge.setIntegrationSettings({
+      pipedriveApiBase: "https://api.pipedrive.com/v1/",
+      pipedriveApiToken: "tok-pd-secret",
+      n8nWebhookUrl: "https://n8n.example.com/webhook/cs",
+      n8nWebhookSecret: "sec-n8n",
+      supabaseUrl: "https://proj.supabase.co/",
+      supabaseAnonKey: "anon-supa",
+    });
+    expect(saved).toEqual({
+      pipedriveApiBase: "https://api.pipedrive.com/v1",
+      hasPipedriveToken: true,
+      n8nWebhookUrl: "https://n8n.example.com/webhook/cs",
+      hasN8nSecret: true,
+      supabaseUrl: "https://proj.supabase.co",
+      hasSupabaseKey: true,
+    });
+    expect("pipedriveApiToken" in saved).toBe(false);
+    expect("n8nWebhookSecret" in saved).toBe(false);
+    expect("supabaseAnonKey" in saved).toBe(false);
+
+    const cleared = await bridge.setIntegrationSettings({
+      clearPipedriveToken: true,
+      clearSupabaseKey: true,
+    });
+    expect(cleared.hasPipedriveToken).toBe(false);
+    expect(cleared.hasN8nSecret).toBe(true);
+    expect(cleared.hasSupabaseKey).toBe(false);
+    expect(cleared.pipedriveApiBase).toBe("https://api.pipedrive.com/v1");
+
+    setTauriInternals(true);
+    invokeMock.mockResolvedValueOnce(saved);
+    await expect(bridge.getIntegrationSettings()).resolves.toEqual(saved);
+    expect(invokeMock).toHaveBeenLastCalledWith("get_integration_settings");
+
+    invokeMock.mockResolvedValueOnce(cleared);
+    await expect(
+      bridge.setIntegrationSettings({ clearPipedriveToken: true })
+    ).resolves.toEqual(cleared);
+    expect(invokeMock).toHaveBeenLastCalledWith("set_integration_settings", {
+      settings: { clearPipedriveToken: true },
+    });
+  });
+
   it("propaga rejeição do backend Rust quando invoke falha", async () => {
     setTauriInternals(true);
     const bridge = await import("./bridge");

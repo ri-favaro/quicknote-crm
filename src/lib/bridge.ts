@@ -69,6 +69,36 @@ export interface SetActiveProfileInput {
   clearToken?: boolean;
 }
 
+export interface IntegrationSettings {
+  pipedriveApiBase: string;
+  hasPipedriveToken: boolean;
+  n8nWebhookUrl: string;
+  hasN8nSecret: boolean;
+  supabaseUrl: string;
+  hasSupabaseKey: boolean;
+}
+
+export interface SetIntegrationSettingsInput {
+  pipedriveApiBase?: string;
+  pipedriveApiToken?: string;
+  clearPipedriveToken?: boolean;
+  n8nWebhookUrl?: string;
+  n8nWebhookSecret?: string;
+  clearN8nSecret?: boolean;
+  supabaseUrl?: string;
+  supabaseAnonKey?: string;
+  clearSupabaseKey?: boolean;
+}
+
+export const DEFAULT_INTEGRATION_SETTINGS: IntegrationSettings = {
+  pipedriveApiBase: "",
+  hasPipedriveToken: false,
+  n8nWebhookUrl: "",
+  hasN8nSecret: false,
+  supabaseUrl: "",
+  hasSupabaseKey: false,
+};
+
 export interface Note {
   id: string;
   authorId: string;
@@ -162,6 +192,14 @@ let mockProfileRecord = {
   token: "",
   isConfigured: false,
 };
+let mockIntegrationRecord = {
+  pipedriveApiBase: "",
+  pipedriveApiToken: "",
+  n8nWebhookUrl: "",
+  n8nWebhookSecret: "",
+  supabaseUrl: "",
+  supabaseAnonKey: "",
+};
 interface MockIntegrationLog {
   id: string;
   noteId: string;
@@ -189,6 +227,14 @@ export function resetMockStore(): void {
     token: "",
     isConfigured: false,
   };
+  mockIntegrationRecord = {
+    pipedriveApiBase: "",
+    pipedriveApiToken: "",
+    n8nWebhookUrl: "",
+    n8nWebhookSecret: "",
+    supabaseUrl: "",
+    supabaseAnonKey: "",
+  };
   mockNotes = [];
   mockTodos = [];
   mockIntegrationLogs = [];
@@ -202,6 +248,49 @@ function toPublicProfile(): ActiveProfile {
     hasToken: mockProfileRecord.token.trim().length > 0,
     isConfigured: mockProfileRecord.isConfigured,
   };
+}
+
+function toPublicIntegrationSettings(): IntegrationSettings {
+  return {
+    pipedriveApiBase: mockIntegrationRecord.pipedriveApiBase,
+    hasPipedriveToken: mockIntegrationRecord.pipedriveApiToken.trim().length > 0,
+    n8nWebhookUrl: mockIntegrationRecord.n8nWebhookUrl,
+    hasN8nSecret: mockIntegrationRecord.n8nWebhookSecret.trim().length > 0,
+    supabaseUrl: mockIntegrationRecord.supabaseUrl,
+    hasSupabaseKey: mockIntegrationRecord.supabaseAnonKey.trim().length > 0,
+  };
+}
+
+function normalizeOptionalUrl(raw: string, label: string): string {
+  const trimmed = raw.trim();
+  if (!trimmed) return "";
+  if (/\s/.test(trimmed)) {
+    throw new Error(`${label} inválida. Use uma URL http:// ou https://.`);
+  }
+  try {
+    const parsed = new URL(trimmed);
+    if (
+      (parsed.protocol !== "https:" && parsed.protocol !== "http:") ||
+      parsed.hostname.trim().length === 0
+    ) {
+      throw new Error(`${label} inválida. Use uma URL http:// ou https://.`);
+    }
+  } catch {
+    throw new Error(`${label} inválida. Use uma URL http:// ou https://.`);
+  }
+  return trimmed.replace(/\/+$/, "");
+}
+
+function resolveNextSecret(
+  clear: boolean | undefined,
+  incoming: string | undefined,
+  existing: string
+): string {
+  if (clear) return "";
+  if (incoming !== undefined && incoming.trim().length > 0) {
+    return incoming.trim();
+  }
+  return existing;
 }
 
 function normalizeDueDate(dueDate?: string | null): string | null {
@@ -539,6 +628,55 @@ export async function getActiveProfile(): Promise<ActiveProfile> {
     return toPublicProfile();
   }
   return invoke<ActiveProfile>("get_active_profile");
+}
+
+export async function getIntegrationSettings(): Promise<IntegrationSettings> {
+  if (!isTauriRuntime()) {
+    return toPublicIntegrationSettings();
+  }
+  return invoke<IntegrationSettings>("get_integration_settings");
+}
+
+export async function setIntegrationSettings(
+  settings: SetIntegrationSettingsInput
+): Promise<IntegrationSettings> {
+  if (!isTauriRuntime()) {
+    const pipedriveApiBase =
+      settings.pipedriveApiBase !== undefined
+        ? normalizeOptionalUrl(settings.pipedriveApiBase, "URL base do Pipedrive")
+        : mockIntegrationRecord.pipedriveApiBase;
+    const n8nWebhookUrl =
+      settings.n8nWebhookUrl !== undefined
+        ? normalizeOptionalUrl(settings.n8nWebhookUrl, "URL do webhook n8n")
+        : mockIntegrationRecord.n8nWebhookUrl;
+    const supabaseUrl =
+      settings.supabaseUrl !== undefined
+        ? normalizeOptionalUrl(settings.supabaseUrl, "URL do projeto Supabase")
+        : mockIntegrationRecord.supabaseUrl;
+
+    mockIntegrationRecord = {
+      pipedriveApiBase,
+      pipedriveApiToken: resolveNextSecret(
+        settings.clearPipedriveToken,
+        settings.pipedriveApiToken,
+        mockIntegrationRecord.pipedriveApiToken
+      ),
+      n8nWebhookUrl,
+      n8nWebhookSecret: resolveNextSecret(
+        settings.clearN8nSecret,
+        settings.n8nWebhookSecret,
+        mockIntegrationRecord.n8nWebhookSecret
+      ),
+      supabaseUrl,
+      supabaseAnonKey: resolveNextSecret(
+        settings.clearSupabaseKey,
+        settings.supabaseAnonKey,
+        mockIntegrationRecord.supabaseAnonKey
+      ),
+    };
+    return toPublicIntegrationSettings();
+  }
+  return invoke<IntegrationSettings>("set_integration_settings", { settings });
 }
 
 export async function searchPipedriveDeals(query: string): Promise<DealSummary[]> {

@@ -16,7 +16,8 @@ pub async fn trigger_webhook(
         return Err("Nota não encontrada no banco local.".to_string());
     }
 
-    let _ = client.config().n8n_endpoint()?;
+    let config = client.config();
+    let _ = config.n8n_endpoint()?;
     let _ = client.http();
     let key_suffix = webhook_key
         .map(str::trim)

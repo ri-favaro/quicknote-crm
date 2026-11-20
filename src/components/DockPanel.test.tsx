@@ -4,9 +4,11 @@ import { createRef } from "react";
 import { describe, expect, it, vi } from "vitest";
 import {
   DEFAULT_DOCK_APPEARANCE,
+  DEFAULT_INTEGRATION_SETTINGS,
   type ActiveProfile,
   type DockAppearance,
   type DockState,
+  type IntegrationSettings,
   type Note,
   type Todo,
 } from "../lib/bridge";
@@ -76,6 +78,10 @@ function renderPanel(overrides: Partial<Parameters<typeof DockPanel>[0]> = {}) {
     onRemoveTodo: vi.fn(),
     onOpenNoteFromTodo: vi.fn(),
     onSaveProfile: vi.fn().mockResolvedValue(undefined),
+    integrationSettings: {
+      ...DEFAULT_INTEGRATION_SETTINGS,
+    } as IntegrationSettings,
+    onSaveIntegrationSettings: vi.fn().mockResolvedValue(undefined),
     onOpenSettings: vi.fn(),
     ...overrides,
   };
@@ -397,5 +403,60 @@ describe("DockPanel", () => {
     expect(screen.getByRole("alert")).toHaveTextContent("HTTP 401");
     await user.click(screen.getByRole("button", { name: /Reenviar/i }));
     expect(onSendToPipedrive).toHaveBeenCalledWith("note", undefined);
+  });
+
+  it("permite configurar e limpar segredos write-only das integrações na aba ajustes", async () => {
+    const user = userEvent.setup();
+    const { props } = renderPanel({
+      activeTab: "settings",
+      integrationSettings: {
+        pipedriveApiBase: "https://api.pipedrive.com/v1",
+        hasPipedriveToken: true,
+        n8nWebhookUrl: "",
+        hasN8nSecret: false,
+        supabaseUrl: "https://proj.supabase.co",
+        hasSupabaseKey: true,
+      },
+    });
+
+    expect(screen.getByText("2/3 prontas")).toBeInTheDocument();
+
+    const pipedriveTokenInput = screen.getByLabelText(
+      "Token API Pipedrive"
+    ) as HTMLInputElement;
+    const n8nUrlInput = screen.getByLabelText(
+      "URL webhook n8n"
+    ) as HTMLInputElement;
+    const n8nSecretInput = screen.getByLabelText(
+      "Secret webhook n8n (opcional)"
+    ) as HTMLInputElement;
+
+    expect(pipedriveTokenInput).toHaveValue("");
+    await user.type(pipedriveTokenInput, "pd-novo-token");
+    await user.type(n8nUrlInput, "https://n8n.example.com/webhook/cs");
+    await user.type(n8nSecretInput, "n8n-segredo");
+
+    await user.click(screen.getByRole("button", { name: "Salvar integrações" }));
+
+    await waitFor(() => {
+      expect(props.onSaveIntegrationSettings).toHaveBeenCalledWith({
+        pipedriveApiBase: "https://api.pipedrive.com/v1",
+        pipedriveApiToken: "pd-novo-token",
+        n8nWebhookUrl: "https://n8n.example.com/webhook/cs",
+        n8nWebhookSecret: "n8n-segredo",
+        supabaseUrl: "https://proj.supabase.co",
+        supabaseAnonKey: undefined,
+      });
+    });
+
+    expect(pipedriveTokenInput).toHaveValue("");
+    expect(n8nSecretInput).toHaveValue("");
+
+    await user.click(
+      screen.getByRole("button", { name: "Limpar token Pipedrive" })
+    );
+    expect(props.onSaveIntegrationSettings).toHaveBeenLastCalledWith({
+      clearPipedriveToken: true,
+    });
   });
 });

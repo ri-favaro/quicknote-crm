@@ -16,11 +16,13 @@ import { DockRail, type DockTab } from "./components/DockRail";
 import {
   clampDockOpacity,
   DEFAULT_DOCK_APPEARANCE,
+  DEFAULT_INTEGRATION_SETTINGS,
   deleteNote,
   deleteTodo,
   getActiveProfile,
   getDockAppearance,
   getDockState,
+  getIntegrationSettings,
   resetDockAppearance,
   hideDock,
   isTauriRuntime,
@@ -36,6 +38,7 @@ import {
   setDockAppearance,
   setDockEdge,
   setDockExpanded,
+  setIntegrationSettings,
   toggleTodo,
   upsertTodo,
   type ActiveProfile,
@@ -43,10 +46,12 @@ import {
   type DockAppearance,
   type DockEdge,
   type DockState,
+  type IntegrationSettings,
   type UpdateDockAppearanceInput,
   type Note,
   type PipedriveSendType,
   type SetActiveProfileInput,
+  type SetIntegrationSettingsInput,
   type Todo,
 } from "./lib/bridge";
 
@@ -107,6 +112,19 @@ function isValidDockAppearance(value: unknown): value is DockAppearance {
   );
 }
 
+function isValidIntegrationSettings(value: unknown): value is IntegrationSettings {
+  if (!value || typeof value !== "object") return false;
+  const candidate = value as Partial<IntegrationSettings>;
+  return (
+    typeof candidate.pipedriveApiBase === "string" &&
+    typeof candidate.hasPipedriveToken === "boolean" &&
+    typeof candidate.n8nWebhookUrl === "string" &&
+    typeof candidate.hasN8nSecret === "boolean" &&
+    typeof candidate.supabaseUrl === "string" &&
+    typeof candidate.hasSupabaseKey === "boolean"
+  );
+}
+
 function toErrorMessage(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
 }
@@ -128,6 +146,8 @@ export default function App() {
   const [todoDueDate, setTodoDueDate] = useState("");
   const [todoScope, setTodoScope] = useState<TodoScope>("all");
   const [profile, setProfile] = useState<ActiveProfile>(INITIAL_PROFILE);
+  const [integrationSettings, setIntegrationSettingsState] =
+    useState<IntegrationSettings>(DEFAULT_INTEGRATION_SETTINGS);
   const [persistenceStatus, setPersistenceStatus] = useState<PersistenceStatus>({
     kind: "idle",
   });
@@ -167,6 +187,7 @@ export default function App() {
   const inFlightSavesRef = useRef<Map<string, Promise<Note | null>>>(new Map());
   const userEditedNotesRef = useRef(false);
   const userEditedProfileRef = useRef(false);
+  const userEditedIntegrationsRef = useRef(false);
   const userEditedTodosRef = useRef(false);
   const isMountedRef = useRef(true);
 
@@ -517,8 +538,25 @@ export default function App() {
       listTodos(),
       getActiveProfile(),
       getDockAppearance(),
-    ]).then(([dockRes, notesRes, todosRes, profileRes, appearanceRes]) => {
-      if (!active) return;
+      getIntegrationSettings(),
+    ]).then(
+      ([
+        dockRes,
+        notesRes,
+        todosRes,
+        profileRes,
+        appearanceRes,
+        integrationsRes,
+      ]) => {
+        if (!active) return;
+
+        if (
+          integrationsRes.status === "fulfilled" &&
+          isValidIntegrationSettings(integrationsRes.value) &&
+          !userEditedIntegrationsRef.current
+        ) {
+          setIntegrationSettingsState(integrationsRes.value);
+        }
 
       if (
         dockRes.status === "fulfilled" &&
@@ -909,6 +947,17 @@ export default function App() {
     }
   }, []);
 
+  const handleSaveIntegrationSettings = useCallback(
+    async (input: SetIntegrationSettingsInput) => {
+      userEditedIntegrationsRef.current = true;
+      const saved = await setIntegrationSettings(input);
+      if (isMountedRef.current) {
+        setIntegrationSettingsState(saved);
+      }
+    },
+    []
+  );
+
   const pendingTodos = todos.filter((t) => !t.done).length;
 
   const edgeShellClass =
@@ -1052,6 +1101,8 @@ export default function App() {
         void handleSendToPipedrive(type, todoId)
       }
       onSaveProfile={handleSaveProfile}
+      integrationSettings={integrationSettings}
+      onSaveIntegrationSettings={handleSaveIntegrationSettings}
       onOpenSettings={() => setActiveTab("settings")}
     />
   ) : null;

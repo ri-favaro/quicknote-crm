@@ -23,9 +23,8 @@ pub fn run() {
                 .app_data_dir()
                 .map_err(|e| format!("Falha ao resolver app_data_dir: {e}"))?;
             let database = Database::open(app_data_dir.join("quicknote.db"))?;
+            let integration_client = IntegrationClient::from_env_and_db(&database)?;
             app.manage(database);
-
-            let integration_client = IntegrationClient::from_env()?;
             app.manage(integration_client);
 
             dock::setup_tray(handle)?;
@@ -81,6 +80,8 @@ pub fn run() {
             commands::delete_todo,
             commands::set_active_profile,
             commands::get_active_profile,
+            commands::get_integration_settings,
+            commands::set_integration_settings,
             commands::search_pipedrive_deals,
             commands::send_to_pipedrive,
             commands::trigger_n8n_webhook,

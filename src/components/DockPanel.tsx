@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import { useEffect, useState, type FormEvent, type RefObject } from "react";
 import {
+  DEFAULT_INTEGRATION_SETTINGS,
   isTauriRuntime,
   searchPipedriveDeals,
   type ActiveProfile,
@@ -24,15 +25,18 @@ import {
   type DockAppearance,
   type DockEdge,
   type DockState,
+  type IntegrationSettings,
   type UpdateDockAppearanceInput,
   type Note,
   type PipedriveSendType,
   type SetActiveProfileInput,
+  type SetIntegrationSettingsInput,
   type Todo,
 } from "../lib/bridge";
 import type { DockTab } from "./DockRail";
 import { PipedriveBar, type PipedriveDispatchState } from "./PipedriveBar";
 import { AppearanceSettingsCard } from "./AppearanceSettingsCard";
+import { IntegrationSettingsCard } from "./IntegrationSettingsCard";
 import { ProfileSettingsCard } from "./ProfileSettingsCard";
 
 export type PersistenceStatus =
@@ -84,6 +88,10 @@ interface DockPanelProps {
   onSelectPipedriveDeal?: (noteId: string, deal: DealSummary | null) => void;
   onSendToPipedrive?: (type: PipedriveSendType, todoId?: string) => void;
   onSaveProfile: (input: SetActiveProfileInput) => Promise<void>;
+  integrationSettings?: IntegrationSettings;
+  onSaveIntegrationSettings?: (
+    input: SetIntegrationSettingsInput
+  ) => Promise<void>;
   onOpenSettings: () => void;
 }
 
@@ -176,6 +184,8 @@ export function DockPanel({
   onSelectPipedriveDeal,
   onSendToPipedrive,
   onSaveProfile,
+  integrationSettings = DEFAULT_INTEGRATION_SETTINGS,
+  onSaveIntegrationSettings,
   onOpenSettings,
 }: DockPanelProps) {
   const [confirmingDeleteId, setConfirmingDeleteId] = useState<string | null>(null);
@@ -727,6 +737,13 @@ export function DockPanel({
               profile={profile}
               onSaveProfile={onSaveProfile}
             />
+
+            {onSaveIntegrationSettings && (
+              <IntegrationSettingsCard
+                settings={integrationSettings}
+                onSaveSettings={onSaveIntegrationSettings}
+              />
+            )}
 
             <AppearanceSettingsCard
               appearance={appearance}
