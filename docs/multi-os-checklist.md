@@ -50,3 +50,13 @@ Referência operacional de build, empacotamento e comportamento de janela/dock/t
 - [ ] Em X11: dock encaixa nas bordas, `alwaysOnTop` funciona e atalhos globais respondem.
 - [ ] Tray aparece (com AppIndicator ativo no GNOME/KDE).
 - [ ] Em Wayland: registrar degradação esperada (posição manual e atalho global) sem crash na inicialização.
+
+## 5. Workflow de Release (`.github/workflows/release.yml`)
+
+- **Gatilhos:** tags semânticas (`v*`) e execução manual (`workflow_dispatch`, com `tag_name` opcional).
+- **Fluxo:** o job `create-release` cria ou reutiliza uma **Draft Release** única antes da matriz `build-tauri`, evitando drafts duplicados; em seguida `tauri-apps/tauri-action@v1` compila e envia os instaladores para o mesmo `releaseId`.
+- **Artefatos esperados por runner:**
+  - `windows-latest`: `.msi` e `.exe` (NSIS).
+  - `macos-latest`: `.dmg` para `aarch64-apple-darwin` (Apple Silicon) e `x86_64-apple-darwin` (Intel).
+  - `ubuntu-22.04`: `.AppImage` e `.deb`.
+- **Code signing:** ainda não habilitado; a release nasce como *draft* com nota de aviso sobre SmartScreen (Windows) e Gatekeeper (macOS).
