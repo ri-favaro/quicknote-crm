@@ -783,4 +783,44 @@ mod tests {
         assert_eq!(manager.set_panel_size(DockPanelSize::Compact), DockPanelSize::Wide);
         assert_eq!(manager.panel_size(), DockPanelSize::Compact);
     }
+
+    #[test]
+    fn tauri_conf_declares_valid_multi_os_bundle_icons() {
+        let conf: serde_json::Value =
+            serde_json::from_str(include_str!("../tauri.conf.json")).expect("parse tauri.conf.json");
+        let icons: Vec<&str> = conf["bundle"]["icon"]
+            .as_array()
+            .expect("bundle.icon array")
+            .iter()
+            .map(|v| v.as_str().expect("icon path string"))
+            .collect();
+
+        for required in [
+            "icons/32x32.png",
+            "icons/128x128.png",
+            "icons/128x128@2x.png",
+            "icons/icon.icns",
+            "icons/icon.ico",
+        ] {
+            assert!(
+                icons.contains(&required),
+                "bundle.icon missing required multi-OS icon: {required}"
+            );
+        }
+
+        let manifest_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+        for rel in icons {
+            let full = manifest_dir.join(rel);
+            let bytes = std::fs::read(&full)
+                .unwrap_or_else(|e| panic!("failed reading bundle icon {}: {e}", full.display()));
+            assert!(bytes.len() >= 4, "icon file too small: {rel}");
+            if rel.ends_with(".png") {
+                assert_eq!(&bytes[..4], b"\x89PNG", "invalid PNG header: {rel}");
+            } else if rel.ends_with(".icns") {
+                assert_eq!(&bytes[..4], b"icns", "invalid ICNS header: {rel}");
+            } else if rel.ends_with(".ico") {
+                assert_eq!(&bytes[..4], b"\x00\x00\x01\x00", "invalid ICO header: {rel}");
+            }
+        }
+    }
 }
