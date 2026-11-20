@@ -43,6 +43,35 @@ const DEFAULT_FALLBACK_PROFILE: ActiveProfile = {
   isConfigured: false,
 };
 
+const DEFAULT_DOCK_STATE: DockState = {
+  edge: "right",
+  expanded: false,
+  alwaysOnTop: true,
+  visible: true,
+  shortcuts: { toggle: "Alt+Space", newNote: "Ctrl+Shift+N" },
+};
+
+type InvokeHandler = (args?: Record<string, unknown>) => unknown | Promise<unknown>;
+
+function mockTauriInvoke(overrides: Record<string, InvokeHandler> = {}) {
+  const handlers: Record<string, InvokeHandler> = {
+    get_dock_state: () => DEFAULT_DOCK_STATE,
+    get_dock_appearance: () => DEFAULT_DOCK_APPEARANCE,
+    list_notes: () => [],
+    list_todos: () => [],
+    get_active_profile: () => DEFAULT_FALLBACK_PROFILE,
+    ...overrides,
+  };
+
+  invokeMock.mockImplementation(async (cmd: string, args?: Record<string, unknown>) => {
+    const handler = handlers[cmd];
+    if (!handler) {
+      throw new Error(`Comando IPC não mapeado no mock: ${cmd}`);
+    }
+    return handler(args);
+  });
+}
+
 beforeEach(async () => {
   window.localStorage.clear();
   setTauriInternals(false);
@@ -114,15 +143,19 @@ describe("App (fluxos integrados do dock)", () => {
     expect(await screen.findByRole("heading", { name: "Posição e ajustes" })).toBeInTheDocument();
 
     fireEvent.contextMenu(rail);
-    const contextHeading = await screen.findByText("Posição do dock");
-    expect(contextHeading.parentElement).toHaveClass("bg-popover", "border-border");
-    expect(
-      within(contextHeading.parentElement!).getByRole("button", { name: "Direita" })
-    ).toHaveClass("bg-accent", "text-accent-foreground");
+    const contextMenu = await screen.findByRole("menu", { name: "Posição do dock" });
+    expect(within(contextMenu).getByRole("button", { name: "Direita" })).toHaveAttribute(
+      "aria-pressed",
+      "true"
+    );
+    expect(within(contextMenu).getByRole("button", { name: "Esquerda" })).toHaveAttribute(
+      "aria-pressed",
+      "false"
+    );
 
     await user.keyboard("{Escape}");
     await waitFor(() => {
-      expect(screen.queryByText("Posição do dock")).not.toBeInTheDocument();
+      expect(screen.queryByRole("menu", { name: "Posição do dock" })).not.toBeInTheDocument();
     });
     expect(screen.getByRole("heading", { name: "Posição e ajustes" })).toBeInTheDocument();
 
@@ -135,24 +168,15 @@ describe("App (fluxos integrados do dock)", () => {
   it("mantém listeners IPC únicos, preserva nota anterior no dock://new-note, sincroniza dock://state-changed e limpa no unmount", async () => {
     setTauriInternals(true);
 
-    let state: DockState = {
-      edge: "right",
-      expanded: false,
-      alwaysOnTop: true,
-      visible: true,
-      shortcuts: { toggle: "Alt+Space", newNote: "Ctrl+Shift+N" },
-    };
+    let state: DockState = { ...DEFAULT_DOCK_STATE };
 
-    invokeMock.mockImplementation(async (cmd: string, args?: Record<string, unknown>) => {
-      if (cmd === "get_dock_state") return state;
-      if (cmd === "set_dock_expanded") {
+    mockTauriInvoke({
+      get_dock_state: () => state,
+      set_dock_expanded: (args) => {
         state = { ...state, expanded: Boolean(args?.expanded) };
         return state;
-      }
-      if (cmd === "list_notes") return [];
-      if (cmd === "list_todos") return [];
-      if (cmd === "get_active_profile") return DEFAULT_FALLBACK_PROFILE;
-      if (cmd === "save_note_draft") {
+      },
+      save_note_draft: (args) => {
         const note = args?.note as { id?: string; title: string; contentMd: string };
         return {
           id: note.id ?? "n-saved",
@@ -166,8 +190,7 @@ describe("App (fluxos integrados do dock)", () => {
           updatedAt: "2026-11-19T10:00:00Z",
           syncedAt: null,
         } satisfies Note;
-      }
-      return state;
+      },
     });
 
     const listeners = new Map<string, (event: { payload: unknown }) => void>();
@@ -228,21 +251,12 @@ describe("App (fluxos integrados do dock)", () => {
       resolveInitialState = resolve;
     });
 
-    invokeMock.mockImplementation(async (cmd: string, args?: Record<string, unknown>) => {
-      if (cmd === "get_dock_state") return initialPromise;
-      if (cmd === "list_notes") return [];
-      if (cmd === "list_todos") return [];
-      if (cmd === "get_active_profile") return DEFAULT_FALLBACK_PROFILE;
-      if (cmd === "set_dock_expanded") {
-        return {
-          edge: "right",
-          expanded: Boolean(args?.expanded),
-          alwaysOnTop: true,
-          visible: true,
-          shortcuts: { toggle: "Alt+Space", newNote: "Ctrl+Shift+N" },
-        };
-      }
-      return initialPromise;
+    mockTauriInvoke({
+      get_dock_state: () => initialPromise,
+      set_dock_expanded: (args) => ({
+        ...DEFAULT_DOCK_STATE,
+        expanded: Boolean(args?.expanded),
+      }),
     });
     listenMock.mockResolvedValue(vi.fn());
 
@@ -265,7 +279,7 @@ describe("App (fluxos integrados do dock)", () => {
     expect(screen.getByRole("heading", { name: "Notas rápidas" })).toBeInTheDocument();
   });
 
-  it("preserva fundo transparente no index.html e recorte arredondado limpo no runtime Tauri", async () => {
+  it("preserva fundo transparente no index.html e aplica atributos iniciais de aparência no runtime Tauri", async () => {
     const bodyMatch = indexHtml.match(/<body[^>]*class="([^"]*)"/i);
     expect(bodyMatch).not.toBeNull();
     const bodyClasses = bodyMatch?.[1].split(/\s+/) ?? [];
@@ -276,49 +290,33 @@ describe("App (fluxos integrados do dock)", () => {
     );
 
     setTauriInternals(true);
-    invokeMock.mockImplementation(async (cmd: string) => {
-      if (cmd === "list_notes" || cmd === "list_todos") return [];
-      if (cmd === "get_active_profile") return DEFAULT_FALLBACK_PROFILE;
-      return {
-        edge: "right",
-        expanded: false,
-        alwaysOnTop: true,
-        visible: true,
-        shortcuts: { toggle: "Alt+Space", newNote: "Ctrl+Shift+N" },
-      } satisfies DockState;
-    });
+    mockTauriInvoke();
     listenMock.mockResolvedValue(vi.fn());
 
     const { container } = render(<App />);
-    const shell = container.firstElementChild as HTMLElement | null;
+    const shell = container.querySelector<HTMLElement>("[data-theme]");
     expect(shell).not.toBeNull();
-    expect(shell).toHaveClass("overflow-hidden", "rounded-l-[22px]", "bg-background");
-    expect(shell).not.toHaveClass("bg-zinc-950");
-    expect(shell?.style.opacity).toBe("1");
-
-    const rail = screen.getByRole("navigation", { name: "Barra rápida QuickNote" });
-    expect(rail).toHaveClass("bg-transparent");
+    await waitFor(() => {
+      expect(invokeMock).toHaveBeenCalledWith("get_dock_appearance");
+    });
+    expect(shell).toHaveAttribute("data-theme", DEFAULT_DOCK_APPEARANCE.theme);
+    expect(shell).toHaveAttribute("data-accent", DEFAULT_DOCK_APPEARANCE.accent);
+    expect(shell).toHaveAttribute("data-panel-size", DEFAULT_DOCK_APPEARANCE.panelSize);
+    expect(shell?.style.opacity).toBe(String(DEFAULT_DOCK_APPEARANCE.collapsedOpacity / 100));
+    expect(screen.getByRole("navigation", { name: "Barra rápida QuickNote" })).toBeInTheDocument();
   });
 
   it("aplica tema, cor, largura e opacidades expandido/retraído em tempo real, persiste no backend e restaura padrão", async () => {
     const user = userEvent.setup();
     setTauriInternals(true);
 
-    let state: DockState = {
-      edge: "right",
-      expanded: false,
-      alwaysOnTop: true,
-      visible: true,
-      shortcuts: { toggle: "Alt+Space", newNote: "Ctrl+Shift+N" },
-    };
+    let state: DockState = { ...DEFAULT_DOCK_STATE };
     let savedAppearance: DockAppearance = { ...DEFAULT_DOCK_APPEARANCE };
 
-    invokeMock.mockImplementation(async (cmd: string, args?: Record<string, unknown>) => {
-      if (cmd === "get_dock_state") return state;
-      if (cmd === "list_notes" || cmd === "list_todos") return [];
-      if (cmd === "get_active_profile") return DEFAULT_FALLBACK_PROFILE;
-      if (cmd === "get_dock_appearance") return savedAppearance;
-      if (cmd === "set_dock_appearance") {
+    mockTauriInvoke({
+      get_dock_state: () => state,
+      get_dock_appearance: () => savedAppearance,
+      set_dock_appearance: (args) => {
         const patch = (args?.appearance ?? {}) as Partial<DockAppearance>;
         savedAppearance = {
           theme: patch.theme ?? savedAppearance.theme,
@@ -328,16 +326,15 @@ describe("App (fluxos integrados do dock)", () => {
           panelSize: patch.panelSize ?? savedAppearance.panelSize,
         };
         return savedAppearance;
-      }
-      if (cmd === "reset_dock_appearance") {
+      },
+      reset_dock_appearance: () => {
         savedAppearance = { ...DEFAULT_DOCK_APPEARANCE };
         return savedAppearance;
-      }
-      if (cmd === "set_dock_expanded") {
+      },
+      set_dock_expanded: (args) => {
         state = { ...state, expanded: Boolean(args?.expanded) };
         return state;
-      }
-      return state;
+      },
     });
     listenMock.mockResolvedValue(vi.fn());
 
@@ -457,19 +454,13 @@ describe("App (fluxos integrados do dock)", () => {
 
     let failNextSave = true;
     const state: DockState = {
-      edge: "right",
+      ...DEFAULT_DOCK_STATE,
       expanded: true,
-      alwaysOnTop: true,
-      visible: true,
-      shortcuts: { toggle: "Alt+Space", newNote: "Ctrl+Shift+N" },
     };
 
-    invokeMock.mockImplementation(async (cmd: string, args?: Record<string, unknown>) => {
-      if (cmd === "get_dock_state") return state;
-      if (cmd === "list_notes") return [];
-      if (cmd === "list_todos") return [];
-      if (cmd === "get_active_profile") return DEFAULT_FALLBACK_PROFILE;
-      if (cmd === "save_note_draft") {
+    mockTauriInvoke({
+      get_dock_state: () => state,
+      save_note_draft: (args) => {
         if (failNextSave) {
           throw new Error("Erro de escrita SQLite");
         }
@@ -486,8 +477,7 @@ describe("App (fluxos integrados do dock)", () => {
           updatedAt: "2026-11-19T10:00:00Z",
           syncedAt: null,
         } satisfies Note;
-      }
-      return state;
+      },
     });
     listenMock.mockResolvedValue(vi.fn());
 

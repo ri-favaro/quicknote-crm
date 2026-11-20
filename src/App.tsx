@@ -1082,6 +1082,8 @@ export default function App() {
 
       {contextMenu && (
         <div
+          role="menu"
+          aria-label="Posição do dock"
           style={{ left: contextMenu.x, top: contextMenu.y }}
           className="fixed z-50 w-42 rounded-[14px] border border-border bg-popover p-1.5 text-foreground shadow-xl"
         >
@@ -1092,6 +1094,7 @@ export default function App() {
             <button
               key={edge}
               type="button"
+              aria-pressed={dock.edge === edge}
               onClick={() => void handleSelectEdge(edge)}
               className={`flex w-full items-center justify-between rounded-lg px-2 py-1.5 text-left text-[12px] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring cursor-pointer ${
                 dock.edge === edge
