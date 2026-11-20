@@ -1,6 +1,7 @@
 @import "tailwindcss";
 
-:root {
+:root,
+[data-theme="dark"] {
   --background: hsl(222 20% 8%);
   --popover: hsl(222 20% 11%);
   --card: hsl(240 5% 21%);
@@ -17,6 +18,125 @@
   --accent-foreground: hsl(270 60% 80%);
   --destructive: hsl(0 84% 60%);
   --destructive-foreground: hsl(0 0% 98%);
+  --status-success-fg: hsl(152 72% 72%);
+  --status-warning-fg: hsl(42 92% 72%);
+  --status-danger-fg: hsl(0 90% 82%);
+}
+
+[data-theme="light"] {
+  --background: hsl(220 20% 97%);
+  --popover: hsl(0 0% 100%);
+  --card: hsl(0 0% 100%);
+  --secondary: hsl(220 16% 92%);
+  --muted: hsl(220 14% 87%);
+  --border: hsl(220 14% 82%);
+  --input: hsl(220 14% 82%);
+  --muted-foreground: hsl(220 12% 38%);
+  --foreground: hsl(222 28% 12%);
+  --primary: hsl(270 70% 48%);
+  --primary-foreground: hsl(0 0% 98%);
+  --ring: hsl(270 70% 48%);
+  --accent: hsl(270 60% 93%);
+  --accent-foreground: hsl(270 70% 34%);
+  --destructive: hsl(0 72% 48%);
+  --destructive-foreground: hsl(0 0% 98%);
+  --status-success-fg: hsl(156 76% 24%);
+  --status-warning-fg: hsl(32 88% 28%);
+  --status-danger-fg: hsl(0 72% 38%);
+}
+
+[data-theme="high-contrast"] {
+  --background: hsl(0 0% 4%);
+  --popover: hsl(0 0% 7%);
+  --card: hsl(0 0% 10%);
+  --secondary: hsl(0 0% 15%);
+  --muted: hsl(0 0% 20%);
+  --border: hsl(0 0% 54%);
+  --input: hsl(0 0% 54%);
+  --muted-foreground: hsl(0 0% 80%);
+  --foreground: hsl(0 0% 100%);
+  --primary: hsl(270 95% 68%);
+  --primary-foreground: hsl(0 0% 4%);
+  --ring: hsl(270 95% 68%);
+  --accent: hsl(270 50% 22%);
+  --accent-foreground: hsl(270 95% 88%);
+  --destructive: hsl(0 90% 62%);
+  --destructive-foreground: hsl(0 0% 100%);
+  --status-success-fg: hsl(152 100% 78%);
+  --status-warning-fg: hsl(46 100% 76%);
+  --status-danger-fg: hsl(0 100% 84%);
+}
+
+[data-accent="blue"] {
+  --primary: hsl(217 91% 58%);
+  --primary-foreground: hsl(0 0% 98%);
+  --ring: hsl(217 91% 58%);
+  --accent: hsl(217 48% 20%);
+  --accent-foreground: hsl(213 94% 78%);
+}
+
+[data-theme="light"][data-accent="blue"] {
+  --primary: hsl(217 82% 48%);
+  --primary-foreground: hsl(0 0% 98%);
+  --ring: hsl(217 82% 48%);
+  --accent: hsl(214 80% 93%);
+  --accent-foreground: hsl(217 82% 32%);
+}
+
+[data-theme="high-contrast"][data-accent="blue"] {
+  --primary: hsl(210 100% 66%);
+  --primary-foreground: hsl(0 0% 4%);
+  --ring: hsl(210 100% 66%);
+  --accent: hsl(217 55% 22%);
+  --accent-foreground: hsl(210 100% 88%);
+}
+
+[data-accent="emerald"] {
+  --primary: hsl(158 64% 44%);
+  --primary-foreground: hsl(0 0% 98%);
+  --ring: hsl(158 64% 44%);
+  --accent: hsl(158 42% 16%);
+  --accent-foreground: hsl(156 72% 72%);
+}
+
+[data-theme="light"][data-accent="emerald"] {
+  --primary: hsl(158 72% 34%);
+  --primary-foreground: hsl(0 0% 98%);
+  --ring: hsl(158 72% 34%);
+  --accent: hsl(152 60% 91%);
+  --accent-foreground: hsl(158 75% 22%);
+}
+
+[data-theme="high-contrast"][data-accent="emerald"] {
+  --primary: hsl(156 90% 56%);
+  --primary-foreground: hsl(0 0% 4%);
+  --ring: hsl(156 90% 56%);
+  --accent: hsl(158 48% 18%);
+  --accent-foreground: hsl(156 95% 84%);
+}
+
+[data-accent="amber"] {
+  --primary: hsl(36 92% 50%);
+  --primary-foreground: hsl(222 25% 10%);
+  --ring: hsl(36 92% 50%);
+  --accent: hsl(36 48% 18%);
+  --accent-foreground: hsl(42 96% 74%);
+}
+
+[data-theme="light"][data-accent="amber"] {
+  --primary: hsl(32 88% 40%);
+  --primary-foreground: hsl(0 0% 98%);
+  --ring: hsl(32 88% 40%);
+  --accent: hsl(42 92% 91%);
+  --accent-foreground: hsl(28 85% 26%);
+}
+
+[data-theme="high-contrast"][data-accent="amber"] {
+  --primary: hsl(45 100% 58%);
+  --primary-foreground: hsl(0 0% 4%);
+  --ring: hsl(45 100% 58%);
+  --accent: hsl(36 55% 20%);
+  --accent-foreground: hsl(48 100% 84%);
 }
 
 @theme inline {
@@ -36,6 +156,9 @@
   --color-accent-foreground: var(--accent-foreground);
   --color-destructive: var(--destructive);
   --color-destructive-foreground: var(--destructive-foreground);
+  --color-status-success: var(--status-success-fg);
+  --color-status-warning: var(--status-warning-fg);
+  --color-status-danger: var(--status-danger-fg);
 }
 
 @layer base {
@@ -62,6 +185,10 @@
 
   input[type="date"] {
     color-scheme: dark;
+  }
+
+  [data-theme="light"] input[type="date"] {
+    color-scheme: light;
   }
 }
 

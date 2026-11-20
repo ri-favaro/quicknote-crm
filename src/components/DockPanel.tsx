@@ -21,8 +21,10 @@ import {
   searchPipedriveDeals,
   type ActiveProfile,
   type DealSummary,
+  type DockAppearance,
   type DockEdge,
   type DockState,
+  type UpdateDockAppearanceInput,
   type Note,
   type PipedriveSendType,
   type SetActiveProfileInput,
@@ -30,6 +32,7 @@ import {
 } from "../lib/bridge";
 import type { DockTab } from "./DockRail";
 import { PipedriveBar, type PipedriveDispatchState } from "./PipedriveBar";
+import { AppearanceSettingsCard } from "./AppearanceSettingsCard";
 import { ProfileSettingsCard } from "./ProfileSettingsCard";
 
 export type PersistenceStatus =
@@ -52,11 +55,12 @@ interface DockPanelProps {
   profile: ActiveProfile;
   persistenceStatus: PersistenceStatus;
   statusNotice: string | null;
-  dockOpacity: number;
+  appearance: DockAppearance;
   noteBodyRef: RefObject<HTMLTextAreaElement | null>;
   onSelectEdge: (edge: DockEdge) => void;
   onTogglePin: () => void;
-  onOpacityChange: (opacity: number) => void;
+  onUpdateAppearance: (patch: UpdateDockAppearanceInput) => void;
+  onResetAppearance: () => void;
   onCollapse: () => void;
   onHide: () => void;
   onSelectNote: (id: string) => void;
@@ -146,11 +150,12 @@ export function DockPanel({
   profile,
   persistenceStatus,
   statusNotice,
-  dockOpacity,
+  appearance,
   noteBodyRef,
   onSelectEdge,
   onTogglePin,
-  onOpacityChange,
+  onUpdateAppearance,
+  onResetAppearance,
   onCollapse,
   onHide,
   onSelectNote,
@@ -186,7 +191,6 @@ export function DockPanel({
   const pendingPipedriveActivityCount = activeNoteTodos.filter(
     (t) => !t.done && t.pipedriveActivityId === null
   ).length;
-  const opacityProgress = Math.max(0, Math.min(100, ((dockOpacity - 40) / 60) * 100));
 
   const noteTitleById = new Map(
     notes.map((n) => [n.id, n.title.trim() || "Sem título"])
@@ -223,7 +227,7 @@ export function DockPanel({
           <button
             type="button"
             onClick={onRetrySave}
-            className="shrink-0 font-medium text-red-200 underline decoration-destructive/60 underline-offset-2 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring cursor-pointer"
+            className="shrink-0 font-medium text-status-danger underline decoration-destructive/60 underline-offset-2 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring cursor-pointer"
           >
             Tentar novamente
           </button>
@@ -331,12 +335,12 @@ export function DockPanel({
         {activeTab === "notes" && activeNote && (
           <>
             {!profile.isConfigured && (
-              <div className="flex items-center justify-between gap-2 rounded-[12px] border border-amber-400/25 bg-amber-500/10 px-2.5 py-1.5 text-[11px] text-amber-200">
+              <div className="flex items-center justify-between gap-2 rounded-[12px] border border-amber-400/25 bg-amber-500/10 px-2.5 py-1.5 text-[11px] text-status-warning">
                 <span className="truncate">Usando perfil CS Local</span>
                 <button
                   type="button"
                   onClick={onOpenSettings}
-                  className="shrink-0 font-medium text-amber-100 underline decoration-amber-300/60 underline-offset-2 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring cursor-pointer"
+                  className="shrink-0 font-medium text-status-warning underline decoration-status-warning/60 underline-offset-2 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring cursor-pointer"
                 >
                   Configurar
                 </button>
@@ -393,7 +397,7 @@ export function DockPanel({
                 }
                 title="Excluir nota"
                 aria-label="Excluir nota"
-                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[12px] border border-border bg-secondary text-muted-foreground transition-[background-color,color,border-color,transform] duration-150 hover:border-destructive/40 hover:bg-destructive/15 hover:text-red-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring active:scale-[0.96] cursor-pointer"
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[12px] border border-border bg-secondary text-muted-foreground transition-[background-color,color,border-color,transform] duration-150 hover:border-destructive/40 hover:bg-destructive/15 hover:text-status-danger focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring active:scale-[0.96] cursor-pointer"
               >
                 <Trash2 className="h-3.5 w-3.5" />
               </button>
@@ -401,7 +405,7 @@ export function DockPanel({
 
             {confirmingDeleteId === activeNote.id && (
               <div className="flex items-center justify-between gap-2 rounded-[12px] border border-destructive/40 bg-destructive/15 px-2.5 py-1.5 text-[11px]">
-                <span className="truncate text-red-200">
+                <span className="truncate text-status-danger">
                   Excluir nota e tarefas vinculadas?
                 </span>
                 <div className="flex shrink-0 items-center gap-1.5">
@@ -418,7 +422,7 @@ export function DockPanel({
                       setConfirmingDeleteId(null);
                       onDeleteNote(activeNote.id);
                     }}
-                    className="rounded-md border border-destructive/50 bg-destructive/30 px-2 py-0.5 font-medium text-red-100 hover:bg-destructive/45 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring cursor-pointer"
+                    className="rounded-md border border-destructive/50 bg-destructive/30 px-2 py-0.5 font-medium text-status-danger hover:bg-destructive/45 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring cursor-pointer"
                   >
                     Confirmar exclusão
                   </button>
@@ -510,7 +514,7 @@ export function DockPanel({
                         <span
                           className={`tabular-nums shrink-0 rounded px-1 py-0.5 font-mono text-[10px] ${
                             isDueOverdue(todo.dueDate, todo.done)
-                              ? "border border-destructive/35 bg-destructive/20 text-red-200"
+                              ? "border border-destructive/35 bg-destructive/20 text-status-danger"
                               : "bg-muted text-foreground/80"
                           }`}
                         >
@@ -520,7 +524,7 @@ export function DockPanel({
                       {todo.pipedriveActivityId !== null ? (
                         <span
                           title={`Atividade #${todo.pipedriveActivityId} enviada ao Pipedrive`}
-                          className="tabular-nums shrink-0 rounded bg-emerald-500/15 px-1 py-0.5 font-mono text-[10px] text-emerald-200"
+                          className="tabular-nums shrink-0 rounded bg-emerald-500/15 px-1 py-0.5 font-mono text-[10px] text-status-success"
                         >
                           PD #{todo.pipedriveActivityId}
                         </span>
@@ -681,7 +685,7 @@ export function DockPanel({
                             <span
                               className={`tabular-nums inline-flex items-center gap-1 rounded px-1.5 py-0.5 font-mono text-[10px] ${
                                 isDueOverdue(todo.dueDate, todo.done)
-                                  ? "border border-destructive/35 bg-destructive/20 text-red-200"
+                                  ? "border border-destructive/35 bg-destructive/20 text-status-danger"
                                   : "bg-secondary text-foreground/80"
                               }`}
                             >
@@ -722,6 +726,12 @@ export function DockPanel({
             <ProfileSettingsCard
               profile={profile}
               onSaveProfile={onSaveProfile}
+            />
+
+            <AppearanceSettingsCard
+              appearance={appearance}
+              onUpdateAppearance={onUpdateAppearance}
+              onResetAppearance={onResetAppearance}
             />
 
             <section className="rounded-[16px] border border-border bg-card p-3">
@@ -769,34 +779,6 @@ export function DockPanel({
                 >
                   {dock.alwaysOnTop ? "Ativo" : "Desativado"}
                 </button>
-              </div>
-
-              <div className="flex flex-col gap-1.5 border-t border-border pt-2.5">
-                <div className="flex items-center justify-between">
-                  <label
-                    htmlFor="dock-opacity-slider"
-                    className="text-[12px] text-foreground"
-                  >
-                    Opacidade do dock
-                  </label>
-                  <span className="tabular-nums font-mono text-[11px] text-accent-foreground">
-                    {dockOpacity}%
-                  </span>
-                </div>
-                <input
-                  id="dock-opacity-slider"
-                  type="range"
-                  min={40}
-                  max={100}
-                  step={1}
-                  value={dockOpacity}
-                  aria-label="Opacidade do dock"
-                  onChange={(e) => onOpacityChange(Number(e.target.value))}
-                  style={{
-                    background: `linear-gradient(to right, var(--primary) ${opacityProgress}%, var(--secondary) ${opacityProgress}%)`,
-                  }}
-                  className="dock-range h-1.5 w-full cursor-pointer appearance-none rounded-full focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/60"
-                />
               </div>
 
               <div className="flex items-center justify-between border-t border-border pt-2 text-[11px] text-foreground/75">

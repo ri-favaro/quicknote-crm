@@ -96,8 +96,8 @@ export function ProfileSettingsCard({
         <span
           className={`rounded-md px-1.5 py-0.5 text-[10px] font-medium ${
             profile.isConfigured
-              ? "bg-emerald-500/15 text-emerald-300"
-              : "bg-amber-500/15 text-amber-300"
+              ? "bg-emerald-500/15 text-status-success"
+              : "bg-amber-500/15 text-status-warning"
           }`}
         >
           {profile.isConfigured ? "Configurado" : "Padrão local"}
@@ -150,7 +150,7 @@ export function ProfileSettingsCard({
               Token CS (opcional)
             </label>
             {profile.hasToken && (
-              <span className="inline-flex items-center gap-1 text-[10px] text-emerald-300">
+              <span className="inline-flex items-center gap-1 text-[10px] text-status-success">
                 <KeyRound className="h-2.5 w-2.5" />
                 Salvo no backend
               </span>
@@ -174,8 +174,8 @@ export function ProfileSettingsCard({
           <p
             className={
               feedback.kind === "error"
-                ? "rounded-md border border-destructive/40 bg-background/70 px-2 py-1 text-[11px] text-red-200"
-                : "px-0.5 text-[11px] text-emerald-300"
+                ? "rounded-md border border-destructive/40 bg-background/70 px-2 py-1 text-[11px] text-status-danger"
+                : "px-0.5 text-[11px] text-status-success"
             }
           >
             {feedback.text}

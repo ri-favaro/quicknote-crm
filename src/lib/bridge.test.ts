@@ -440,6 +440,39 @@ describe("bridge (modo Tauri IPC)", () => {
     ).rejects.toThrow("já foi enviada");
   });
 
+  it("persiste, aplica clamp e restaura aparência do dock no mock e via IPC Tauri", async () => {
+    const bridge = await import("./bridge");
+    bridge.resetMockStore();
+
+    expect(await bridge.getDockAppearance()).toEqual(bridge.DEFAULT_DOCK_APPEARANCE);
+
+    const updated = await bridge.setDockAppearance({
+      theme: "high-contrast",
+      accent: "amber",
+      expandedOpacity: 150,
+      collapsedOpacity: 10,
+      panelSize: "compact",
+    });
+    expect(updated).toEqual({
+      theme: "high-contrast",
+      accent: "amber",
+      expandedOpacity: 100,
+      collapsedOpacity: 40,
+      panelSize: "compact",
+    });
+
+    const reset = await bridge.resetDockAppearance();
+    expect(reset).toEqual(bridge.DEFAULT_DOCK_APPEARANCE);
+
+    setTauriInternals(true);
+    invokeMock.mockResolvedValueOnce(updated);
+    const fromRust = await bridge.setDockAppearance({ theme: "high-contrast" });
+    expect(invokeMock).toHaveBeenCalledWith("set_dock_appearance", {
+      appearance: { theme: "high-contrast" },
+    });
+    expect(fromRust).toEqual(updated);
+  });
+
   it("propaga rejeição do backend Rust quando invoke falha", async () => {
     setTauriInternals(true);
     const bridge = await import("./bridge");

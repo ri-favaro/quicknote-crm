@@ -2,7 +2,14 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { createRef } from "react";
 import { describe, expect, it, vi } from "vitest";
-import type { ActiveProfile, DockState, Note, Todo } from "../lib/bridge";
+import {
+  DEFAULT_DOCK_APPEARANCE,
+  type ActiveProfile,
+  type DockAppearance,
+  type DockState,
+  type Note,
+  type Todo,
+} from "../lib/bridge";
 import { DockPanel, type PersistenceStatus, type TodoScope } from "./DockPanel";
 
 const BASE_DOCK: DockState = {
@@ -48,11 +55,12 @@ function renderPanel(overrides: Partial<Parameters<typeof DockPanel>[0]> = {}) {
     profile: BASE_PROFILE,
     persistenceStatus: { kind: "idle" } as PersistenceStatus,
     statusNotice: null,
-    dockOpacity: 100,
+    appearance: { ...DEFAULT_DOCK_APPEARANCE } as DockAppearance,
     noteBodyRef: createRef<HTMLTextAreaElement>(),
     onSelectEdge: vi.fn(),
     onTogglePin: vi.fn(),
-    onOpacityChange: vi.fn(),
+    onUpdateAppearance: vi.fn(),
+    onResetAppearance: vi.fn(),
     onCollapse: vi.fn(),
     onHide: vi.fn(),
     onSelectNote: vi.fn(),
@@ -214,11 +222,17 @@ describe("DockPanel", () => {
     });
   });
 
-  it("exibe formulário de perfil CS write-only, posição, slider de opacidade e ações do dock na aba ajustes", async () => {
+  it("exibe formulário de perfil CS write-only, aparência, posição e ações do dock na aba ajustes", async () => {
     const user = userEvent.setup();
     const { props } = renderPanel({
       activeTab: "settings",
-      dockOpacity: 85,
+      appearance: {
+        theme: "light",
+        accent: "blue",
+        expandedOpacity: 85,
+        collapsedOpacity: 60,
+        panelSize: "wide",
+      },
       profile: {
         authorId: "cs-ana",
         authorName: "Ana Paula",
@@ -251,14 +265,35 @@ describe("DockPanel", () => {
     expect(screen.getByText("Alt+Space")).toBeInTheDocument();
     expect(screen.getByText("Ctrl+Shift+N")).toBeInTheDocument();
     expect(screen.getByText("85%")).toBeInTheDocument();
+    expect(screen.getByText("60%")).toBeInTheDocument();
 
-    const opacitySlider = screen.getByRole("slider", { name: "Opacidade do dock" });
-    expect(opacitySlider).toHaveAttribute("min", "40");
-    expect(opacitySlider).toHaveAttribute("max", "100");
-    expect(opacitySlider).toHaveValue("85");
+    expect(screen.getByRole("button", { name: "Claro" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: "Azul" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: "Amplo" })).toHaveAttribute("aria-pressed", "true");
 
-    fireEvent.change(opacitySlider, { target: { value: "65" } });
-    expect(props.onOpacityChange).toHaveBeenCalledWith(65);
+    await user.click(screen.getByRole("button", { name: "Alto contraste" }));
+    expect(props.onUpdateAppearance).toHaveBeenCalledWith({ theme: "high-contrast" });
+
+    await user.click(screen.getByRole("button", { name: "Esmeralda" }));
+    expect(props.onUpdateAppearance).toHaveBeenCalledWith({ accent: "emerald" });
+
+    await user.click(screen.getByRole("button", { name: "Compacto" }));
+    expect(props.onUpdateAppearance).toHaveBeenCalledWith({ panelSize: "compact" });
+
+    const expandedSlider = screen.getByRole("slider", { name: "Opacidade expandido" });
+    expect(expandedSlider).toHaveAttribute("min", "40");
+    expect(expandedSlider).toHaveAttribute("max", "100");
+    expect(expandedSlider).toHaveValue("85");
+    fireEvent.change(expandedSlider, { target: { value: "70" } });
+    expect(props.onUpdateAppearance).toHaveBeenCalledWith({ expandedOpacity: 70 });
+
+    const collapsedSlider = screen.getByRole("slider", { name: "Opacidade retraído" });
+    expect(collapsedSlider).toHaveValue("60");
+    fireEvent.change(collapsedSlider, { target: { value: "50" } });
+    expect(props.onUpdateAppearance).toHaveBeenCalledWith({ collapsedOpacity: 50 });
+
+    await user.click(screen.getByRole("button", { name: "Restaurar padrão" }));
+    expect(props.onResetAppearance).toHaveBeenCalledTimes(1);
 
     await user.click(screen.getByRole("button", { name: "Esquerda" }));
     expect(props.onSelectEdge).toHaveBeenCalledWith("left");

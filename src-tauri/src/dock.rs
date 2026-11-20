@@ -1,3 +1,4 @@
+use crate::db::DockPanelSize;
 use serde::{Deserialize, Serialize};
 use std::sync::{
     atomic::{AtomicBool, Ordering},
@@ -15,9 +16,13 @@ pub const MAIN_WINDOW_LABEL: &str = "main";
 
 const COLLAPSED_THICKNESS_LOGICAL: f64 = 56.0;
 const COLLAPSED_LENGTH_LOGICAL: f64 = 236.0;
-const EXPANDED_SIDE_WIDTH_LOGICAL: f64 = 404.0;
+const EXPANDED_SIDE_WIDTH_COMPACT_LOGICAL: f64 = 348.0;
+const EXPANDED_SIDE_WIDTH_DEFAULT_LOGICAL: f64 = 404.0;
+const EXPANDED_SIDE_WIDTH_WIDE_LOGICAL: f64 = 484.0;
 const EXPANDED_SIDE_HEIGHT_LOGICAL: f64 = 540.0;
-const EXPANDED_TOP_WIDTH_LOGICAL: f64 = 420.0;
+const EXPANDED_TOP_WIDTH_COMPACT_LOGICAL: f64 = 364.0;
+const EXPANDED_TOP_WIDTH_DEFAULT_LOGICAL: f64 = 420.0;
+const EXPANDED_TOP_WIDTH_WIDE_LOGICAL: f64 = 500.0;
 const EXPANDED_TOP_HEIGHT_LOGICAL: f64 = 500.0;
 const TASKBAR_RESERVE_LOGICAL: f64 = 48.0;
 const DRAG_SNAP_DEBOUNCE_MS: u64 = 240;
@@ -65,6 +70,7 @@ impl Default for DockState {
 
 pub struct DockManager {
     state: Mutex<DockState>,
+    panel_size: Mutex<DockPanelSize>,
     snap_scheduled: AtomicBool,
     last_move_at: Mutex<Instant>,
     ignore_moves_until: Mutex<Instant>,
@@ -75,10 +81,20 @@ impl DockManager {
         let now = Instant::now();
         Self {
             state: Mutex::new(DockState::default()),
+            panel_size: Mutex::new(DockPanelSize::default()),
             snap_scheduled: AtomicBool::new(false),
             last_move_at: Mutex::new(now),
             ignore_moves_until: Mutex::new(now),
         }
+    }
+
+    pub fn panel_size(&self) -> DockPanelSize {
+        *self.panel_size.lock().expect("panel_size poisoned")
+    }
+
+    pub fn set_panel_size(&self, panel_size: DockPanelSize) -> DockPanelSize {
+        let mut guard = self.panel_size.lock().expect("panel_size poisoned");
+        std::mem::replace(&mut *guard, panel_size)
     }
 
     pub fn snapshot(&self) -> DockState {
@@ -165,16 +181,32 @@ impl DockManager {
     }
 }
 
-pub fn compute_dock_size(edge: DockEdge, expanded: bool) -> (f64, f64) {
+pub fn compute_dock_size(
+    edge: DockEdge,
+    expanded: bool,
+    panel_size: DockPanelSize,
+) -> (f64, f64) {
     match (edge, expanded) {
         (DockEdge::Right | DockEdge::Left, false) => {
             (COLLAPSED_THICKNESS_LOGICAL, COLLAPSED_LENGTH_LOGICAL)
         }
         (DockEdge::Top, false) => (COLLAPSED_LENGTH_LOGICAL, COLLAPSED_THICKNESS_LOGICAL),
         (DockEdge::Right | DockEdge::Left, true) => {
-            (EXPANDED_SIDE_WIDTH_LOGICAL, EXPANDED_SIDE_HEIGHT_LOGICAL)
+            let width = match panel_size {
+                DockPanelSize::Compact => EXPANDED_SIDE_WIDTH_COMPACT_LOGICAL,
+                DockPanelSize::Default => EXPANDED_SIDE_WIDTH_DEFAULT_LOGICAL,
+                DockPanelSize::Wide => EXPANDED_SIDE_WIDTH_WIDE_LOGICAL,
+            };
+            (width, EXPANDED_SIDE_HEIGHT_LOGICAL)
         }
-        (DockEdge::Top, true) => (EXPANDED_TOP_WIDTH_LOGICAL, EXPANDED_TOP_HEIGHT_LOGICAL),
+        (DockEdge::Top, true) => {
+            let width = match panel_size {
+                DockPanelSize::Compact => EXPANDED_TOP_WIDTH_COMPACT_LOGICAL,
+                DockPanelSize::Default => EXPANDED_TOP_WIDTH_DEFAULT_LOGICAL,
+                DockPanelSize::Wide => EXPANDED_TOP_WIDTH_WIDE_LOGICAL,
+            };
+            (width, EXPANDED_TOP_HEIGHT_LOGICAL)
+        }
     }
 }
 
@@ -186,8 +218,9 @@ pub fn compute_dock_rect(
     scale_factor: f64,
     edge: DockEdge,
     expanded: bool,
+    panel_size: DockPanelSize,
 ) -> (i32, i32, u32, u32) {
-    let (logical_w, logical_h) = compute_dock_size(edge, expanded);
+    let (logical_w, logical_h) = compute_dock_size(edge, expanded, panel_size);
     let phys_w = (logical_w * scale_factor).round().max(1.0) as u32;
     let phys_h = (logical_h * scale_factor).round().max(1.0) as u32;
     let taskbar_reserve = (TASKBAR_RESERVE_LOGICAL * scale_factor).round() as i32;
@@ -259,6 +292,7 @@ pub fn apply_window_geometry(
         scale,
         edge,
         expanded,
+        manager.panel_size(),
     );
 
     manager.suppress_move_events();
@@ -295,6 +329,21 @@ pub fn hide_window(app: &AppHandle) {
         let state = app.state::<DockManager>().set_visible(false);
         emit_state(app, &state);
     }
+}
+
+pub fn apply_panel_size(app: &AppHandle, panel_size: DockPanelSize) -> Result<(), String> {
+    let manager = app.state::<DockManager>();
+    let previous = manager.set_panel_size(panel_size);
+    if previous == panel_size {
+        return Ok(());
+    }
+    let state = manager.snapshot();
+    if state.expanded {
+        if let Some(window) = app.get_webview_window(MAIN_WINDOW_LABEL) {
+            apply_window_geometry(&window, &manager, state.edge, true)?;
+        }
+    }
+    Ok(())
 }
 
 pub fn apply_edge(app: &AppHandle, edge: DockEdge) -> Result<DockState, String> {
@@ -519,27 +568,27 @@ mod tests {
     #[test]
     fn computes_collapsed_and_expanded_rects_for_all_edges() {
         assert_eq!(
-            compute_dock_rect(0, 0, 1920, 1080, 1.0, DockEdge::Right, false),
+            compute_dock_rect(0, 0, 1920, 1080, 1.0, DockEdge::Right, false, DockPanelSize::Default),
             (1864, 398, 56, 236)
         );
         assert_eq!(
-            compute_dock_rect(0, 0, 1920, 1080, 1.0, DockEdge::Left, false),
+            compute_dock_rect(0, 0, 1920, 1080, 1.0, DockEdge::Left, false, DockPanelSize::Default),
             (0, 398, 56, 236)
         );
         assert_eq!(
-            compute_dock_rect(0, 0, 1920, 1080, 1.0, DockEdge::Top, false),
+            compute_dock_rect(0, 0, 1920, 1080, 1.0, DockEdge::Top, false, DockPanelSize::Default),
             (842, 0, 236, 56)
         );
         assert_eq!(
-            compute_dock_rect(0, 0, 1920, 1080, 1.0, DockEdge::Right, true),
+            compute_dock_rect(0, 0, 1920, 1080, 1.0, DockEdge::Right, true, DockPanelSize::Default),
             (1516, 246, 404, 540)
         );
         assert_eq!(
-            compute_dock_rect(0, 0, 1920, 1080, 1.0, DockEdge::Left, true),
+            compute_dock_rect(0, 0, 1920, 1080, 1.0, DockEdge::Left, true, DockPanelSize::Default),
             (0, 246, 404, 540)
         );
         assert_eq!(
-            compute_dock_rect(0, 0, 1920, 1080, 1.0, DockEdge::Top, true),
+            compute_dock_rect(0, 0, 1920, 1080, 1.0, DockEdge::Top, true, DockPanelSize::Default),
             (750, 0, 420, 500)
         );
     }
@@ -547,7 +596,7 @@ mod tests {
     #[test]
     fn respects_secondary_monitor_and_dpi_scale() {
         assert_eq!(
-            compute_dock_rect(1920, 0, 2560, 1440, 1.5, DockEdge::Right, false),
+            compute_dock_rect(1920, 0, 2560, 1440, 1.5, DockEdge::Right, false, DockPanelSize::Default),
             (4396, 507, 84, 354)
         );
     }
@@ -649,7 +698,7 @@ mod tests {
 
     #[test]
     fn clamps_y_origin_when_panel_exceeds_monitor_height() {
-        let (x, y, w, h) = compute_dock_rect(0, 100, 1024, 480, 1.0, DockEdge::Right, true);
+        let (x, y, w, h) = compute_dock_rect(0, 100, 1024, 480, 1.0, DockEdge::Right, true, DockPanelSize::Default);
         assert_eq!((w, h), (404, 540));
         assert_eq!(x, 620);
         assert_eq!(y, 100);
@@ -699,5 +748,39 @@ mod tests {
             main_window.get("backgroundColor").is_none() || main_window["backgroundColor"].is_null(),
             "backgroundColor opaco no tao pinta WM_ERASEBKGND sem alpha no Windows"
         );
+    }
+
+    #[test]
+    fn computes_expanded_widths_for_compact_default_and_wide_panel_sizes() {
+        assert_eq!(
+            compute_dock_rect(0, 0, 1920, 1080, 1.0, DockEdge::Right, true, DockPanelSize::Compact),
+            (1572, 246, 348, 540)
+        );
+        assert_eq!(
+            compute_dock_rect(0, 0, 1920, 1080, 1.0, DockEdge::Right, true, DockPanelSize::Wide),
+            (1436, 246, 484, 540)
+        );
+        assert_eq!(
+            compute_dock_rect(0, 0, 1920, 1080, 1.0, DockEdge::Top, true, DockPanelSize::Compact),
+            (778, 0, 364, 500)
+        );
+        assert_eq!(
+            compute_dock_rect(0, 0, 1920, 1080, 1.0, DockEdge::Top, true, DockPanelSize::Wide),
+            (710, 0, 500, 500)
+        );
+        assert_eq!(
+            compute_dock_rect(0, 0, 1920, 1080, 1.0, DockEdge::Right, false, DockPanelSize::Wide),
+            (1864, 398, 56, 236)
+        );
+    }
+
+    #[test]
+    fn dock_manager_set_panel_size_returns_previous_value() {
+        let manager = DockManager::new();
+        assert_eq!(manager.panel_size(), DockPanelSize::Default);
+        assert_eq!(manager.set_panel_size(DockPanelSize::Wide), DockPanelSize::Default);
+        assert_eq!(manager.set_panel_size(DockPanelSize::Wide), DockPanelSize::Wide);
+        assert_eq!(manager.set_panel_size(DockPanelSize::Compact), DockPanelSize::Wide);
+        assert_eq!(manager.panel_size(), DockPanelSize::Compact);
     }
 }

@@ -1,12 +1,12 @@
 use tauri::{AppHandle, Manager, State};
 
 use crate::db::{
-    ActiveProfile, Database, Note, SaveNoteDraftInput, SetActiveProfileInput, Todo,
-    UpsertTodoInput,
+    ActiveProfile, Database, DockAppearance, Note, SaveNoteDraftInput, SetActiveProfileInput, Todo,
+    UpdateDockAppearanceInput, UpsertTodoInput,
 };
 use crate::dock::{
-    apply_edge, apply_expanded, emit_state, hide_window, toggle_expanded, DockEdge, DockManager,
-    DockState, MAIN_WINDOW_LABEL,
+    apply_edge, apply_expanded, apply_panel_size, emit_state, hide_window, toggle_expanded,
+    DockEdge, DockManager, DockState, MAIN_WINDOW_LABEL,
 };
 use crate::integrations::{
     n8n, pipedrive, supabase, DealSummary, DispatchResult, IntegrationClient, SyncResult,
@@ -48,6 +48,32 @@ pub fn set_always_on_top(app: AppHandle, enabled: bool) -> Result<DockState, Str
 #[tauri::command]
 pub fn hide_dock(app: AppHandle) {
     hide_window(&app);
+}
+
+#[tauri::command]
+pub fn get_dock_appearance(db: State<'_, Database>) -> Result<DockAppearance, String> {
+    db.get_dock_appearance()
+}
+
+#[tauri::command]
+pub fn set_dock_appearance(
+    app: AppHandle,
+    db: State<'_, Database>,
+    appearance: UpdateDockAppearanceInput,
+) -> Result<DockAppearance, String> {
+    let saved = db.set_dock_appearance(appearance)?;
+    apply_panel_size(&app, saved.panel_size)?;
+    Ok(saved)
+}
+
+#[tauri::command]
+pub fn reset_dock_appearance(
+    app: AppHandle,
+    db: State<'_, Database>,
+) -> Result<DockAppearance, String> {
+    let saved = db.reset_dock_appearance()?;
+    apply_panel_size(&app, saved.panel_size)?;
+    Ok(saved)
 }
 
 #[tauri::command]

@@ -231,7 +231,7 @@ export function PipedriveBar({
               className="absolute right-0 left-0 z-20 mt-1 max-h-40 overflow-y-auto rounded-[10px] border border-border bg-popover p-1 shadow-xl"
             >
               {searchError ? (
-                <div className="flex items-start gap-1.5 px-2 py-1.5 text-[11px] text-red-200">
+                <div className="flex items-start gap-1.5 px-2 py-1.5 text-[11px] text-status-danger">
                   <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
                   <span>{searchError}</span>
                 </div>
@@ -277,7 +277,7 @@ export function PipedriveBar({
       {dispatchState.kind === "sent" && (
         <div
           role="status"
-          className="flex items-center gap-1.5 rounded-[8px] border border-emerald-500/25 bg-emerald-500/10 px-2 py-1 text-[11px] text-emerald-200"
+          className="flex items-center gap-1.5 rounded-[8px] border border-emerald-500/25 bg-emerald-500/10 px-2 py-1 text-[11px] text-status-success"
         >
           <CheckCircle2 className="h-3.5 w-3.5 shrink-0" />
           <span className="min-w-0 flex-1 truncate">{dispatchState.message}</span>
@@ -287,7 +287,7 @@ export function PipedriveBar({
       {dispatchState.kind === "error" && (
         <div
           role="alert"
-          className="flex items-center justify-between gap-2 rounded-[8px] border border-destructive/40 bg-destructive/15 px-2 py-1 text-[11px] text-red-200"
+          className="flex items-center justify-between gap-2 rounded-[8px] border border-destructive/40 bg-destructive/15 px-2 py-1 text-[11px] text-status-danger"
         >
           <div className="flex min-w-0 items-center gap-1.5">
             <AlertCircle className="h-3.5 w-3.5 shrink-0" />
@@ -298,7 +298,7 @@ export function PipedriveBar({
           <button
             type="button"
             onClick={() => onSend(dispatchState.type, dispatchState.todoId)}
-            className="flex shrink-0 items-center gap-1 rounded-[6px] border border-destructive/50 bg-destructive/25 px-2 py-0.5 text-[10px] font-medium text-red-100 transition-[background-color,transform] duration-150 hover:bg-destructive/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring active:scale-[0.96] cursor-pointer"
+            className="flex shrink-0 items-center gap-1 rounded-[6px] border border-destructive/50 bg-destructive/25 px-2 py-0.5 text-[10px] font-medium text-status-danger transition-[background-color,transform] duration-150 hover:bg-destructive/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring active:scale-[0.96] cursor-pointer"
           >
             <RotateCw className="h-2.5 w-2.5" />
             <span>Reenviar</span>

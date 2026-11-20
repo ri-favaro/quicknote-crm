@@ -14,10 +14,14 @@ import {
 import type { PipedriveDispatchState } from "./components/PipedriveBar";
 import { DockRail, type DockTab } from "./components/DockRail";
 import {
+  clampDockOpacity,
+  DEFAULT_DOCK_APPEARANCE,
   deleteNote,
   deleteTodo,
   getActiveProfile,
+  getDockAppearance,
   getDockState,
+  resetDockAppearance,
   hideDock,
   isTauriRuntime,
   listNotes,
@@ -29,14 +33,17 @@ import {
   sendToPipedrive,
   setActiveProfile,
   setAlwaysOnTop,
+  setDockAppearance,
   setDockEdge,
   setDockExpanded,
   toggleTodo,
   upsertTodo,
   type ActiveProfile,
   type DealSummary,
+  type DockAppearance,
   type DockEdge,
   type DockState,
+  type UpdateDockAppearanceInput,
   type Note,
   type PipedriveSendType,
   type SetActiveProfileInput,
@@ -63,27 +70,6 @@ const INITIAL_PROFILE: ActiveProfile = {
 
 const AUTOSAVE_DEBOUNCE_MS = 400;
 
-export const DOCK_OPACITY_STORAGE_KEY = "quicknote:dock-opacity";
-const DEFAULT_DOCK_OPACITY = 100;
-const MIN_DOCK_OPACITY = 40;
-const MAX_DOCK_OPACITY = 100;
-
-function clampDockOpacity(value: number): number {
-  if (!Number.isFinite(value)) return DEFAULT_DOCK_OPACITY;
-  return Math.min(MAX_DOCK_OPACITY, Math.max(MIN_DOCK_OPACITY, Math.round(value)));
-}
-
-function loadDockOpacity(): number {
-  try {
-    const raw = window.localStorage.getItem(DOCK_OPACITY_STORAGE_KEY);
-    if (raw === null) return DEFAULT_DOCK_OPACITY;
-    const parsed = Number(raw);
-    return Number.isFinite(parsed) ? clampDockOpacity(parsed) : DEFAULT_DOCK_OPACITY;
-  } catch {
-    return DEFAULT_DOCK_OPACITY;
-  }
-}
-
 function createDraftNote(profile: ActiveProfile): Note {
   const now = new Date().toISOString();
   return {
@@ -98,6 +84,27 @@ function createDraftNote(profile: ActiveProfile): Note {
     updatedAt: now,
     syncedAt: null,
   };
+}
+
+function isValidDockAppearance(value: unknown): value is DockAppearance {
+  if (!value || typeof value !== "object") return false;
+  const candidate = value as Partial<DockAppearance>;
+  return (
+    (candidate.theme === "dark" ||
+      candidate.theme === "light" ||
+      candidate.theme === "high-contrast") &&
+    (candidate.accent === "violet" ||
+      candidate.accent === "blue" ||
+      candidate.accent === "emerald" ||
+      candidate.accent === "amber") &&
+    (candidate.panelSize === "compact" ||
+      candidate.panelSize === "default" ||
+      candidate.panelSize === "wide") &&
+    typeof candidate.expandedOpacity === "number" &&
+    Number.isFinite(candidate.expandedOpacity) &&
+    typeof candidate.collapsedOpacity === "number" &&
+    Number.isFinite(candidate.collapsedOpacity)
+  );
 }
 
 function toErrorMessage(err: unknown): string {
@@ -125,7 +132,7 @@ export default function App() {
     kind: "idle",
   });
   const [statusNotice, setStatusNotice] = useState<string | null>(null);
-  const [dockOpacity, setDockOpacity] = useState<number>(loadDockOpacity);
+  const [appearance, setAppearance] = useState<DockAppearance>(DEFAULT_DOCK_APPEARANCE);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(
     null
   );
@@ -138,6 +145,7 @@ export default function App() {
 
   const noteBodyRef = useRef<HTMLTextAreaElement>(null);
   const stateVersionRef = useRef(0);
+  const appearanceVersionRef = useRef(0);
   const notesRef = useRef<Note[]>(notes);
   notesRef.current = notes;
   const activeNoteIdRef = useRef<string>(activeNoteId);
@@ -359,15 +367,71 @@ export default function App() {
     await hideDock();
   }, [flushPendingSaves]);
 
-  const handleOpacityChange = useCallback((nextOpacity: number) => {
-    const clamped = clampDockOpacity(nextOpacity);
-    setDockOpacity(clamped);
-    try {
-      window.localStorage.setItem(DOCK_OPACITY_STORAGE_KEY, String(clamped));
-    } catch {
-      // Ignora falhas de armazenamento local em ambientes restritos
-    }
+  const handleUpdateAppearance = useCallback(
+    (patch: UpdateDockAppearanceInput) => {
+      const version = ++appearanceVersionRef.current;
+      const normalizedPatch: UpdateDockAppearanceInput = {
+        ...patch,
+        expandedOpacity:
+          patch.expandedOpacity !== undefined
+            ? clampDockOpacity(patch.expandedOpacity)
+            : undefined,
+        collapsedOpacity:
+          patch.collapsedOpacity !== undefined
+            ? clampDockOpacity(patch.collapsedOpacity)
+            : undefined,
+      };
+
+      setAppearance((prev) => ({
+        theme: normalizedPatch.theme ?? prev.theme,
+        accent: normalizedPatch.accent ?? prev.accent,
+        expandedOpacity:
+          normalizedPatch.expandedOpacity ?? prev.expandedOpacity,
+        collapsedOpacity:
+          normalizedPatch.collapsedOpacity ?? prev.collapsedOpacity,
+        panelSize: normalizedPatch.panelSize ?? prev.panelSize,
+      }));
+
+      void setDockAppearance(normalizedPatch)
+        .then((saved) => {
+          if (isMountedRef.current && appearanceVersionRef.current === version && isValidDockAppearance(saved)) {
+            setAppearance(saved);
+          }
+        })
+        .catch((err) => {
+          if (isMountedRef.current) {
+            setStatusNotice(toErrorMessage(err));
+          }
+        });
+    },
+    []
+  );
+
+  const handleResetAppearance = useCallback(() => {
+    const version = ++appearanceVersionRef.current;
+    setAppearance(DEFAULT_DOCK_APPEARANCE);
+
+    void resetDockAppearance()
+      .then((saved) => {
+        if (
+          isMountedRef.current &&
+          appearanceVersionRef.current === version &&
+          isValidDockAppearance(saved)
+        ) {
+          setAppearance(saved);
+        }
+      })
+      .catch((err) => {
+        if (isMountedRef.current) {
+          setStatusNotice(toErrorMessage(err));
+        }
+      });
   }, []);
+
+  useEffect(() => {
+    document.documentElement.dataset.theme = appearance.theme;
+    document.documentElement.dataset.accent = appearance.accent;
+  }, [appearance.theme, appearance.accent]);
 
   const handleSelectNote = useCallback(
     (nextId: string) => {
@@ -445,13 +509,15 @@ export default function App() {
     let active = true;
     isMountedRef.current = true;
     const initialVersion = stateVersionRef.current;
+    const initialAppearanceVersion = appearanceVersionRef.current;
 
     Promise.allSettled([
       getDockState(),
       listNotes(),
       listTodos(),
       getActiveProfile(),
-    ]).then(([dockRes, notesRes, todosRes, profileRes]) => {
+      getDockAppearance(),
+    ]).then(([dockRes, notesRes, todosRes, profileRes, appearanceRes]) => {
       if (!active) return;
 
       if (
@@ -459,6 +525,14 @@ export default function App() {
         stateVersionRef.current === initialVersion
       ) {
         setDock(dockRes.value);
+      }
+
+      if (
+        appearanceRes.status === "fulfilled" &&
+        appearanceVersionRef.current === initialAppearanceVersion &&
+        isValidDockAppearance(appearanceRes.value)
+      ) {
+        setAppearance(appearanceRes.value);
       }
 
       const loadedProfile =
@@ -950,11 +1024,12 @@ export default function App() {
       profile={profile}
       persistenceStatus={persistenceStatus}
       statusNotice={statusNotice}
-      dockOpacity={dockOpacity}
+      appearance={appearance}
       noteBodyRef={noteBodyRef}
       onSelectEdge={handleSelectEdge}
       onTogglePin={handleTogglePin}
-      onOpacityChange={handleOpacityChange}
+      onUpdateAppearance={handleUpdateAppearance}
+      onResetAppearance={handleResetAppearance}
       onCollapse={() => void handleExpand(false)}
       onHide={() => void handleHide()}
       onSelectNote={handleSelectNote}
@@ -981,9 +1056,16 @@ export default function App() {
     />
   ) : null;
 
+  const activeOpacity = dock.expanded
+    ? appearance.expandedOpacity
+    : appearance.collapsedOpacity;
+
   const shell = (
     <div
-      style={{ opacity: dockOpacity / 100 }}
+      data-theme={appearance.theme}
+      data-accent={appearance.accent}
+      data-panel-size={appearance.panelSize}
+      style={{ opacity: activeOpacity / 100 }}
       className={`relative flex h-full w-full overflow-hidden border-border bg-background transition-opacity duration-150 ${edgeShellClass}`}
     >
       {dock.edge === "right" ? (
@@ -1053,15 +1135,28 @@ export default function App() {
   );
 
   if (!isTauriRuntime()) {
+    const sideWidthClass =
+      appearance.panelSize === "compact"
+        ? "w-[348px]"
+        : appearance.panelSize === "wide"
+          ? "w-[484px]"
+          : "w-[404px]";
+    const topWidthClass =
+      appearance.panelSize === "compact"
+        ? "w-[364px]"
+        : appearance.panelSize === "wide"
+          ? "w-[500px]"
+          : "w-[420px]";
+
     const previewSize =
       dock.edge === "top"
         ? dock.expanded
-          ? "h-[500px] w-[420px] top-0 left-1/2 -translate-x-1/2"
+          ? `h-[500px] ${topWidthClass} top-0 left-1/2 -translate-x-1/2`
           : "h-[56px] w-[236px] top-0 left-1/2 -translate-x-1/2"
         : dock.expanded
           ? dock.edge === "right"
-            ? "h-[540px] w-[404px] right-0 top-1/2 -translate-y-1/2"
-            : "h-[540px] w-[404px] left-0 top-1/2 -translate-y-1/2"
+            ? `h-[540px] ${sideWidthClass} right-0 top-1/2 -translate-y-1/2`
+            : `h-[540px] ${sideWidthClass} left-0 top-1/2 -translate-y-1/2`
           : dock.edge === "right"
             ? "h-[236px] w-[56px] right-0 top-1/2 -translate-y-1/2"
             : "h-[236px] w-[56px] left-0 top-1/2 -translate-y-1/2";

@@ -8,6 +8,137 @@ use uuid::Uuid;
 
 pub const DEFAULT_AUTHOR_ID: &str = "local-cs";
 pub const DEFAULT_AUTHOR_NAME: &str = "CS Local";
+pub const MIN_DOCK_OPACITY: u8 = 40;
+pub const MAX_DOCK_OPACITY: u8 = 100;
+pub const DEFAULT_DOCK_OPACITY: u8 = 100;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum DockTheme {
+    #[default]
+    Dark,
+    Light,
+    HighContrast,
+}
+
+impl DockTheme {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Dark => "dark",
+            Self::Light => "light",
+            Self::HighContrast => "high-contrast",
+        }
+    }
+
+    pub fn from_db(value: &str) -> Result<Self, String> {
+        match value {
+            "dark" => Ok(Self::Dark),
+            "light" => Ok(Self::Light),
+            "high-contrast" => Ok(Self::HighContrast),
+            other => Err(format!("Tema do dock inválido no SQLite: {other}")),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum DockAccent {
+    #[default]
+    Violet,
+    Blue,
+    Emerald,
+    Amber,
+}
+
+impl DockAccent {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Violet => "violet",
+            Self::Blue => "blue",
+            Self::Emerald => "emerald",
+            Self::Amber => "amber",
+        }
+    }
+
+    pub fn from_db(value: &str) -> Result<Self, String> {
+        match value {
+            "violet" => Ok(Self::Violet),
+            "blue" => Ok(Self::Blue),
+            "emerald" => Ok(Self::Emerald),
+            "amber" => Ok(Self::Amber),
+            other => Err(format!("Cor de destaque inválida no SQLite: {other}")),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum DockPanelSize {
+    Compact,
+    #[default]
+    Default,
+    Wide,
+}
+
+impl DockPanelSize {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Compact => "compact",
+            Self::Default => "default",
+            Self::Wide => "wide",
+        }
+    }
+
+    pub fn from_db(value: &str) -> Result<Self, String> {
+        match value {
+            "compact" => Ok(Self::Compact),
+            "default" => Ok(Self::Default),
+            "wide" => Ok(Self::Wide),
+            other => Err(format!("Tamanho do painel inválido no SQLite: {other}")),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DockAppearance {
+    pub theme: DockTheme,
+    pub accent: DockAccent,
+    pub expanded_opacity: u8,
+    pub collapsed_opacity: u8,
+    pub panel_size: DockPanelSize,
+}
+
+impl Default for DockAppearance {
+    fn default() -> Self {
+        Self {
+            theme: DockTheme::default(),
+            accent: DockAccent::default(),
+            expanded_opacity: DEFAULT_DOCK_OPACITY,
+            collapsed_opacity: DEFAULT_DOCK_OPACITY,
+            panel_size: DockPanelSize::default(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UpdateDockAppearanceInput {
+    #[serde(default)]
+    pub theme: Option<DockTheme>,
+    #[serde(default)]
+    pub accent: Option<DockAccent>,
+    #[serde(default)]
+    pub expanded_opacity: Option<i64>,
+    #[serde(default)]
+    pub collapsed_opacity: Option<i64>,
+    #[serde(default)]
+    pub panel_size: Option<DockPanelSize>,
+}
+
+fn clamp_opacity(value: i64) -> u8 {
+    value.clamp(i64::from(MIN_DOCK_OPACITY), i64::from(MAX_DOCK_OPACITY)) as u8
+}
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -206,6 +337,63 @@ impl Database {
     pub fn get_active_profile(&self) -> Result<ActiveProfile, String> {
         let conn = self.lock_conn()?;
         read_active_profile(&conn)
+    }
+
+    pub fn get_dock_appearance(&self) -> Result<DockAppearance, String> {
+        let conn = self.lock_conn()?;
+        read_dock_appearance(&conn)
+    }
+
+    pub fn set_dock_appearance(
+        &self,
+        input: UpdateDockAppearanceInput,
+    ) -> Result<DockAppearance, String> {
+        let conn = self.lock_conn()?;
+        let current = read_dock_appearance(&conn)?;
+        let next = DockAppearance {
+            theme: input.theme.unwrap_or(current.theme),
+            accent: input.accent.unwrap_or(current.accent),
+            expanded_opacity: input
+                .expanded_opacity
+                .map(clamp_opacity)
+                .unwrap_or(current.expanded_opacity),
+            collapsed_opacity: input
+                .collapsed_opacity
+                .map(clamp_opacity)
+                .unwrap_or(current.collapsed_opacity),
+            panel_size: input.panel_size.unwrap_or(current.panel_size),
+        };
+
+        let updated_at = now_iso();
+        conn.execute(
+            "INSERT INTO dock_appearance (singleton, theme, accent, expanded_opacity, collapsed_opacity, panel_size, updated_at)
+             VALUES (1, ?1, ?2, ?3, ?4, ?5, ?6)
+             ON CONFLICT(singleton) DO UPDATE SET
+                 theme = excluded.theme,
+                 accent = excluded.accent,
+                 expanded_opacity = excluded.expanded_opacity,
+                 collapsed_opacity = excluded.collapsed_opacity,
+                 panel_size = excluded.panel_size,
+                 updated_at = excluded.updated_at",
+            params![
+                next.theme.as_str(),
+                next.accent.as_str(),
+                i64::from(next.expanded_opacity),
+                i64::from(next.collapsed_opacity),
+                next.panel_size.as_str(),
+                updated_at
+            ],
+        )
+        .map_err(|e| format!("Falha ao salvar aparência do dock: {e}"))?;
+
+        Ok(next)
+    }
+
+    pub fn reset_dock_appearance(&self) -> Result<DockAppearance, String> {
+        let conn = self.lock_conn()?;
+        conn.execute("DELETE FROM dock_appearance WHERE singleton = 1", [])
+            .map_err(|e| format!("Falha ao restaurar aparência padrão do dock: {e}"))?;
+        Ok(DockAppearance::default())
     }
 
     pub fn set_active_profile(
@@ -740,9 +928,58 @@ fn init_schema(conn: &Connection) -> Result<(), String> {
             author_name TEXT NOT NULL,
             token TEXT NOT NULL DEFAULT '',
             updated_at TEXT NOT NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS dock_appearance (
+            singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
+            theme TEXT NOT NULL CHECK (theme IN ('dark', 'light', 'high-contrast')),
+            accent TEXT NOT NULL CHECK (accent IN ('violet', 'blue', 'emerald', 'amber')),
+            expanded_opacity INTEGER NOT NULL CHECK (expanded_opacity BETWEEN 40 AND 100),
+            collapsed_opacity INTEGER NOT NULL CHECK (collapsed_opacity BETWEEN 40 AND 100),
+            panel_size TEXT NOT NULL CHECK (panel_size IN ('compact', 'default', 'wide')),
+            updated_at TEXT NOT NULL
         );",
     )
     .map_err(|e| format!("Falha ao inicializar schema SQLite: {e}"))
+}
+
+fn read_dock_appearance(conn: &Connection) -> Result<DockAppearance, String> {
+    let row = conn
+        .query_row(
+            "SELECT theme, accent, expanded_opacity, collapsed_opacity, panel_size
+             FROM dock_appearance
+             WHERE singleton = 1",
+            [],
+            |r| {
+                let theme: String = r.get(0)?;
+                let accent: String = r.get(1)?;
+                let expanded_opacity: i64 = r.get(2)?;
+                let collapsed_opacity: i64 = r.get(3)?;
+                let panel_size: String = r.get(4)?;
+                Ok((
+                    theme,
+                    accent,
+                    expanded_opacity,
+                    collapsed_opacity,
+                    panel_size,
+                ))
+            },
+        )
+        .optional()
+        .map_err(|e| format!("Falha ao ler aparência do dock: {e}"))?;
+
+    match row {
+        Some((theme, accent, expanded_opacity, collapsed_opacity, panel_size)) => {
+            Ok(DockAppearance {
+                theme: DockTheme::from_db(&theme)?,
+                accent: DockAccent::from_db(&accent)?,
+                expanded_opacity: clamp_opacity(expanded_opacity),
+                collapsed_opacity: clamp_opacity(collapsed_opacity),
+                panel_size: DockPanelSize::from_db(&panel_size)?,
+            })
+        }
+        None => Ok(DockAppearance::default()),
+    }
 }
 
 fn read_active_profile(conn: &Connection) -> Result<ActiveProfile, String> {
@@ -1484,5 +1721,62 @@ mod tests {
 
         assert!(db.set_todo_pipedrive_activity_id(&todo.id, 0).is_err());
         assert!(db.set_todo_pipedrive_activity_id("inexistente", 9876).is_err());
+    }
+
+    #[test]
+    fn dock_appearance_persists_partial_updates_clamps_opacity_and_resets() {
+        let dir = std::env::temp_dir().join(format!("quicknote-appearance-{}", Uuid::new_v4()));
+        let db_file = dir.join("quicknote.db");
+
+        {
+            let db = Database::open(&db_file).expect("open db");
+            assert_eq!(db.get_dock_appearance().unwrap(), DockAppearance::default());
+
+            let updated = db
+                .set_dock_appearance(UpdateDockAppearanceInput {
+                    theme: Some(DockTheme::Light),
+                    accent: Some(DockAccent::Emerald),
+                    expanded_opacity: Some(150),
+                    collapsed_opacity: Some(15),
+                    panel_size: Some(DockPanelSize::Wide),
+                })
+                .unwrap();
+
+            assert_eq!(updated.theme, DockTheme::Light);
+            assert_eq!(updated.accent, DockAccent::Emerald);
+            assert_eq!(updated.expanded_opacity, 100);
+            assert_eq!(updated.collapsed_opacity, 40);
+            assert_eq!(updated.panel_size, DockPanelSize::Wide);
+
+            let partial = db
+                .set_dock_appearance(UpdateDockAppearanceInput {
+                    theme: Some(DockTheme::HighContrast),
+                    ..Default::default()
+                })
+                .unwrap();
+            assert_eq!(partial.theme, DockTheme::HighContrast);
+            assert_eq!(partial.accent, DockAccent::Emerald);
+            assert_eq!(partial.collapsed_opacity, 40);
+            assert_eq!(partial.panel_size, DockPanelSize::Wide);
+        }
+
+        {
+            let reopened = Database::open(&db_file).expect("reopen db");
+            let loaded = reopened.get_dock_appearance().unwrap();
+            assert_eq!(loaded.theme, DockTheme::HighContrast);
+            assert_eq!(loaded.accent, DockAccent::Emerald);
+            assert_eq!(loaded.expanded_opacity, 100);
+            assert_eq!(loaded.collapsed_opacity, 40);
+            assert_eq!(loaded.panel_size, DockPanelSize::Wide);
+
+            let reset = reopened.reset_dock_appearance().unwrap();
+            assert_eq!(reset, DockAppearance::default());
+            assert_eq!(
+                reopened.get_dock_appearance().unwrap(),
+                DockAppearance::default()
+            );
+        }
+
+        let _ = fs::remove_dir_all(&dir);
     }
 }
