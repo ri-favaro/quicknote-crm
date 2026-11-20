@@ -264,10 +264,18 @@ function toPublicIntegrationSettings(): IntegrationSettings {
 function normalizeOptionalUrl(raw: string, label: string): string {
   const trimmed = raw.trim();
   if (!trimmed) return "";
-  if (
-    /\s/.test(trimmed) ||
-    !(trimmed.startsWith("https://") || trimmed.startsWith("http://"))
-  ) {
+  if (/\s/.test(trimmed)) {
+    throw new Error(`${label} inválida. Use uma URL http:// ou https://.`);
+  }
+  try {
+    const parsed = new URL(trimmed);
+    if (
+      (parsed.protocol !== "https:" && parsed.protocol !== "http:") ||
+      parsed.hostname.trim().length === 0
+    ) {
+      throw new Error(`${label} inválida. Use uma URL http:// ou https://.`);
+    }
+  } catch {
     throw new Error(`${label} inválida. Use uma URL http:// ou https://.`);
   }
   return trimmed.replace(/\/+$/, "");

@@ -222,7 +222,7 @@ pub struct IntegrationSettings {
     pub has_supabase_key: bool,
 }
 
-#[derive(Debug, Clone, Default, Deserialize)]
+#[derive(Clone, Default, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SetIntegrationSettingsInput {
     #[serde(default)]
@@ -243,6 +243,31 @@ pub struct SetIntegrationSettingsInput {
     pub supabase_anon_key: Option<String>,
     #[serde(default)]
     pub clear_supabase_key: bool,
+}
+
+impl fmt::Debug for SetIntegrationSettingsInput {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("SetIntegrationSettingsInput")
+            .field("pipedrive_api_base", &self.pipedrive_api_base)
+            .field(
+                "pipedrive_api_token",
+                &self.pipedrive_api_token.as_ref().map(|_| "[REDACTED]"),
+            )
+            .field("clear_pipedrive_token", &self.clear_pipedrive_token)
+            .field("n8n_webhook_url", &self.n8n_webhook_url)
+            .field(
+                "n8n_webhook_secret",
+                &self.n8n_webhook_secret.as_ref().map(|_| "[REDACTED]"),
+            )
+            .field("clear_n8n_secret", &self.clear_n8n_secret)
+            .field("supabase_url", &self.supabase_url)
+            .field(
+                "supabase_anon_key",
+                &self.supabase_anon_key.as_ref().map(|_| "[REDACTED]"),
+            )
+            .field("clear_supabase_key", &self.clear_supabase_key)
+            .finish()
+    }
 }
 
 #[derive(Clone, Default, PartialEq, Eq)]
@@ -1178,9 +1203,16 @@ fn normalize_optional_url(raw: &str, label: &str) -> Result<Option<String>, Stri
     if trimmed.is_empty() {
         return Ok(None);
     }
-    if trimmed.chars().any(char::is_whitespace)
-        || !(trimmed.starts_with("https://") || trimmed.starts_with("http://"))
-    {
+    if trimmed.chars().any(char::is_whitespace) {
+        return Err(format!("{label} inválida. Use uma URL http:// ou https://."));
+    }
+    let parsed = reqwest::Url::parse(trimmed)
+        .map_err(|_| format!("{label} inválida. Use uma URL http:// ou https://."))?;
+    let valid_scheme = matches!(parsed.scheme(), "http" | "https");
+    let has_host = parsed
+        .host_str()
+        .is_some_and(|host| !host.trim().is_empty());
+    if !valid_scheme || !has_host {
         return Err(format!("{label} inválida. Use uma URL http:// ou https://."));
     }
     Ok(Some(trimmed.trim_end_matches('/').to_string()))
@@ -2058,17 +2090,34 @@ mod tests {
             });
             assert!(invalid_url.unwrap_err().contains("URL base do Pipedrive"));
 
-            let saved = db
-                .set_integration_settings(SetIntegrationSettingsInput {
-                    pipedrive_api_base: Some(" https://api.pipedrive.com/v1/ ".to_string()),
-                    pipedrive_api_token: Some("secret-pd-123".to_string()),
-                    n8n_webhook_url: Some("https://n8n.example.com/webhook/cs".to_string()),
-                    n8n_webhook_secret: Some("secret-n8n-456".to_string()),
-                    supabase_url: Some("https://proj.supabase.co/".to_string()),
-                    supabase_anon_key: Some("secret-supa-789".to_string()),
-                    ..Default::default()
-                })
-                .unwrap();
+            let hostless_url = db.set_integration_settings(SetIntegrationSettingsInput {
+                pipedrive_api_base: Some("https://".to_string()),
+                ..Default::default()
+            });
+            assert!(hostless_url.unwrap_err().contains("URL base do Pipedrive"));
+
+            let slash_only_url = db.set_integration_settings(SetIntegrationSettingsInput {
+                n8n_webhook_url: Some("http:///".to_string()),
+                ..Default::default()
+            });
+            assert!(slash_only_url.unwrap_err().contains("URL do webhook n8n"));
+
+            let input_to_save = SetIntegrationSettingsInput {
+                pipedrive_api_base: Some(" https://api.pipedrive.com/v1/ ".to_string()),
+                pipedrive_api_token: Some("secret-pd-123".to_string()),
+                n8n_webhook_url: Some("https://n8n.example.com/webhook/cs".to_string()),
+                n8n_webhook_secret: Some("secret-n8n-456".to_string()),
+                supabase_url: Some("https://proj.supabase.co/".to_string()),
+                supabase_anon_key: Some("secret-supa-789".to_string()),
+                ..Default::default()
+            };
+            let input_debug = format!("{input_to_save:?}");
+            assert!(!input_debug.contains("secret-pd-123"));
+            assert!(!input_debug.contains("secret-n8n-456"));
+            assert!(!input_debug.contains("secret-supa-789"));
+            assert!(input_debug.contains("[REDACTED]"));
+
+            let saved = db.set_integration_settings(input_to_save).unwrap();
 
             assert_eq!(saved.pipedrive_api_base, "https://api.pipedrive.com/v1");
             assert!(saved.has_pipedrive_token);

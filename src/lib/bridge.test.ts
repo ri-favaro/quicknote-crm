@@ -485,6 +485,14 @@ describe("bridge (modo Tauri IPC)", () => {
       bridge.setIntegrationSettings({ pipedriveApiBase: "ftp://invalida" })
     ).rejects.toThrow("URL base do Pipedrive");
 
+    await expect(
+      bridge.setIntegrationSettings({ pipedriveApiBase: "https://" })
+    ).rejects.toThrow("URL base do Pipedrive");
+
+    await expect(
+      bridge.setIntegrationSettings({ n8nWebhookUrl: "http:///" })
+    ).rejects.toThrow("URL do webhook n8n");
+
     const saved = await bridge.setIntegrationSettings({
       pipedriveApiBase: "https://api.pipedrive.com/v1/",
       pipedriveApiToken: "tok-pd-secret",

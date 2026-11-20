@@ -129,7 +129,7 @@ export function IntegrationSettingsCard({
         </span>
       </div>
 
-      <form onSubmit={handleSubmit} className="flex flex-col gap-3">
+      <form onSubmit={handleSubmit} noValidate className="flex flex-col gap-3">
         <div className="flex flex-col gap-1.5">
           <div className="flex items-center justify-between">
             <span className="text-[11px] font-medium text-foreground/90">
@@ -182,6 +182,7 @@ export function IntegrationSettingsCard({
               <input
                 id="integration-pipedrive-token"
                 type="password"
+                autoComplete="off"
                 value={pipedriveApiToken}
                 onChange={(e) => setPipedriveApiToken(e.target.value)}
                 placeholder={
@@ -258,6 +259,7 @@ export function IntegrationSettingsCard({
               <input
                 id="integration-n8n-secret"
                 type="password"
+                autoComplete="off"
                 value={n8nWebhookSecret}
                 onChange={(e) => setN8nWebhookSecret(e.target.value)}
                 placeholder={
@@ -334,6 +336,7 @@ export function IntegrationSettingsCard({
               <input
                 id="integration-supabase-key"
                 type="password"
+                autoComplete="off"
                 value={supabaseAnonKey}
                 onChange={(e) => setSupabaseAnonKey(e.target.value)}
                 placeholder={
