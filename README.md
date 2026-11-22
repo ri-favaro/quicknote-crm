@@ -98,6 +98,15 @@ O workflow [`.github/workflows/release.yml`](./.github/workflows/release.yml) ge
 - **Automático:** ao enviar uma tag semântica `v*` (ex.: `git tag v0.1.0 && git push origin v0.1.0`).
 - **Manual (teste):** pela aba **Actions → Release → Run workflow** (`workflow_dispatch`), opcionalmente informando `tag_name`.
 
+#### Changelog automático (`git-cliff`)
+
+O histórico em [`CHANGELOG.md`](./CHANGELOG.md) segue **Keep a Changelog** via [`cliff.toml`](./cliff.toml) a partir dos commits em Conventional Commits. Ao criar uma release, o `release.yml` gera e injeta automaticamente as notas da versão no corpo da draft release.
+
+```bash
+# Atualizar CHANGELOG.md localmente antes de abrir a tag de release
+pnpm changelog
+```
+
 ## Estrutura do Repositório
 
 ```text

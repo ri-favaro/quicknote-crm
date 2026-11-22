@@ -55,6 +55,7 @@ Referência operacional de build, empacotamento e comportamento de janela/dock/t
 
 - **Gatilhos:** tags semânticas (`v*`) e execução manual (`workflow_dispatch`, com `tag_name` opcional).
 - **Fluxo:** o job `create-release` cria ou reutiliza uma **Draft Release** única antes da matriz `build-tauri`, evitando drafts duplicados; em seguida `tauri-apps/tauri-action@v1` compila e envia os instaladores para o mesmo `releaseId`.
+- **Release notes automáticas:** o job `create-release` executa `orhun/git-cliff-action@v4` com `cliff.toml` e injeta as notas da versão no corpo da draft release junto aos links de download e aviso de code signing.
 - **Artefatos esperados por runner:**
   - `windows-latest`: `.msi` e `.exe` (NSIS).
   - `macos-latest`: `.dmg` para `aarch64-apple-darwin` (Apple Silicon) e `x86_64-apple-darwin` (Intel).
