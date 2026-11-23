@@ -17,7 +17,7 @@ Consulte e atualize o documento correspondente antes/depois de mudanças relevan
 
 ## 3. Regras de Arquitetura e Segurança
 - **Fronteira rígida de IPC:** O frontend React nunca chama APIs externas diretamente; toda comunicação passa por `src/lib/bridge.ts` -> comandos Tauri (`invoke`).
-- **Segredos no backend:** Tokens e URLs sensíveis (`PIPEDRIVE_API_TOKEN`, `N8N_WEBHOOK_URL`, `SUPABASE_URL`, `SUPABASE_KEY`) ficam apenas no backend Rust (`.env`/config local no MVP; `keyring` + SQLCipher na v1.1+). Nunca expor segredos no bundle frontend.
+- **Segredos no backend:** Tokens e URLs sensíveis (`PIPEDRIVE_API_TOKEN`, `N8N_WEBHOOK_URL`, `SUPABASE_URL`, `SUPABASE_ANON_KEY`) ficam apenas no backend Rust (`.env`/config local no MVP; `keyring` + SQLCipher na v1.1+). Nunca expor segredos no bundle frontend.
 - **Offline-first:** Toda edição de nota ou tarefa deve persistir no SQLite local imediatamente, sem depender de rede.
 - **Rastreabilidade CS:** Toda nota e log de integração carrega `author_id` e `author_name` do perfil local ativo.
 - **Feedback visual:** Toda ação externa (Pipedrive, n8n, Supabase) retorna status estruturado para exibir feedback claro de sucesso, pendência ou erro com opção de reenvio.

@@ -1,6 +1,6 @@
-﻿# Integrações — QuickNote CRM
+# Integrações — QuickNote CRM
 
-Todas as integrações são executadas exclusivamente pelo backend Rust (`reqwest`) e registram o resultado em `integration_logs`.
+Todas as integrações são executadas exclusivamente pelo backend Rust (`reqwest`) e registram o resultado em `integration_logs`. Atualmente apenas o **Pipedrive** executa chamadas HTTP reais; **n8n** (issue #11) e **Supabase** (issue #12) validam credenciais/configuração e retornam stub até a implementação do envio.
 
 ## 1. Configuração Local (UI + SQLite) e Fallback de Variáveis de Ambiente
 As URLs e credenciais das integrações são configuráveis diretamente pela aba **Ajustes** do app e persistidas na tabela singleton `integration_settings` em `quicknote.db`. Tokens e segredos seguem o padrão **write-only** no backend Rust e nunca retornam ao frontend React.
@@ -21,7 +21,9 @@ Em runtime, o backend prioriza os valores salvos no SQLite local e faz fallback 
 - **Auditoria:** toda tentativa grava `payload_json`, `response_status`, `status` (`sent` ou `error`) e `error_message` sanitizada em `integration_logs` (`target = "pipedrive"`).
 
 ## 3. n8n (Webhook POST Sob Demanda)
-Payload JSON padrão enviado ao webhook:
+- **Status atual:** stub em `src-tauri/src/integrations/n8n.rs` — valida nota e `N8N_WEBHOOK_URL`, aguardando implementação do envio HTTP na issue #11.
+
+Payload JSON padrão planejado para o webhook:
 
 ```json
 {
@@ -45,6 +47,7 @@ Payload JSON padrão enviado ao webhook:
 ```
 
 ## 4. Supabase (Backup & Auditoria)
+- **Status atual:** stub em `src-tauri/src/integrations/supabase.rs` — valida credenciais e contabiliza registros pendentes, aguardando implementação PostgREST na issue #12.
 - Sincroniza `notes`, `todos` e `integration_logs` via PostgREST (`upsert` por `id`).
 - Itens que falharem no envio para Pipedrive ou n8n permanecem marcados como `error` para reenvio manual pela UI.
 
