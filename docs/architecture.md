@@ -22,11 +22,15 @@ quicknote-crm/
 │   ├── blueprint.md
 │   ├── architecture.md
 │   ├── data-model.md
-│   └── integrations.md
+│   ├── integrations.md
+│   └── multi-os-checklist.md
 ├── src/                        # Frontend React + TypeScript + Tailwind
 │   ├── components/
 │   │   ├── DockRail.tsx        # Barra minimalista ancorada na borda
+│   │   ├── AppearanceSettingsCard.tsx # Customização de tema, cor, largura e opacidade
 │   │   ├── DockPanel.tsx       # Painel expandido (notas, tarefas, ajustes)
+│   │   ├── IntegrationSettingsCard.tsx # Configuração local de Pipedrive, n8n e Supabase
+│   │   ├── PipedriveBar.tsx    # Busca de deals e disparo para o Pipedrive
 │   │   └── ProfileSettingsCard.tsx # Configuração do perfil CS ativo
 │   ├── lib/
 │   │   └── bridge.ts           # Contrato único de IPC com o backend Rust + fallback web

@@ -189,6 +189,7 @@ export interface SendToPipedriveInput {
   noteId: string;
   type: PipedriveSendType;
   dealId: number;
+  todoId?: string;
 }
 
 export interface TriggerN8nWebhookInput {

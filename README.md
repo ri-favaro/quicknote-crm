@@ -48,7 +48,7 @@ Os instaladores pré-compilados ficam disponíveis na página de [Releases do Gi
 
 - **Dock flutuante (*frameless*):** janela compacta retrátil nas bordas (`right`, `left`, `top`), `always-on-top` e fora da barra de tarefas (`skipTaskbar`).
 - **Persistência offline-first:** notas, tarefas e perfil CS salvos imediatamente em SQLite local.
-- **Integrações sob demanda:** Pipedrive, webhook n8n e backup/auditoria no Supabase configuráveis pela aba **Ajustes**.
+- **Integrações sob demanda:** busca de deals e envio de notas/atividades ao **Pipedrive** já funcionais; configurações de webhook **n8n** (stub, issue #11) e backup/auditoria **Supabase** (stub, issue #12) já persistidas pela aba **Ajustes**.
 - **System Tray:** clique esquerdo alterna visibilidade; menu de contexto permite trocar borda, abrir nova nota ou encerrar o app.
 - **Atalhos globais:**
   - `Alt+Space` — mostrar/ocultar e focar o dock.
