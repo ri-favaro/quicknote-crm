@@ -60,4 +60,4 @@ Referência operacional de build, empacotamento e comportamento de janela/dock/t
   - `windows-latest`: `.msi` e `.exe` (NSIS).
   - `macos-latest`: `.dmg` para `aarch64-apple-darwin` (Apple Silicon) e `x86_64-apple-darwin` (Intel).
   - `ubuntu-22.04`: `.AppImage` e `.deb`.
-- **Code signing:** ainda não habilitado; a release nasce como *draft* com nota de aviso sobre SmartScreen (Windows) e Gatekeeper (macOS).
+- **Code signing:** Windows sem assinatura; macOS com assinatura *ad-hoc* do bundle (`bundle.macOS.signingIdentity: "-"`), sem Developer ID nem notarização. A release nasce como *draft* com nota de aviso sobre SmartScreen (Windows) e Gatekeeper (macOS). Sem a assinatura ad-hoc do bundle, o Gatekeeper rejeita o `.app` baixado como "danificado" (só o binário vinha assinado pelo linker).
