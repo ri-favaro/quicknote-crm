@@ -31,7 +31,7 @@ Os instaladores pré-compilados ficam disponíveis na página de [Releases do Gi
 > **Aviso sobre binários sem assinatura digital (*code signing*):**
 > Os executáveis atuais ainda não são assinados digitalmente, portanto o sistema operacional pode exibir um alerta de segurança na primeira abertura:
 > - **Windows (SmartScreen):** clique em **Mais informações** → **Executar assim mesmo**.
-> - **macOS (Gatekeeper):** clique com o botão direito em **QuickNote CRM.app** → **Abrir**, ou acesse **Ajustes do Sistema → Privacidade e Segurança** e clique em **Abrir Mesmo Assim**. Se o macOS bloquear por quarentena, remova o atributo com `xattr -cr "/Applications/QuickNote CRM.app"`.
+> - **macOS (Gatekeeper):** o `.app` tem apenas assinatura *ad-hoc* (sem Developer ID/notarização). Arraste para **Aplicativos**, tente abrir uma vez e então clique em **Abrir Mesmo Assim** em **Ajustes do Sistema → Privacidade e Segurança**. Se o macOS ainda bloquear (ou disser que o app está "danificado"), remova a quarentena com `xattr -dr com.apple.quarantine "/Applications/QuickNote CRM.app"`.
 
 ## Primeira Configuração (Aba Ajustes)
 
