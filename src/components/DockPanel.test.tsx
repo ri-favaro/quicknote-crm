@@ -150,7 +150,8 @@ describe("DockPanel", () => {
     await user.click(screen.getByRole("button", { name: "Configurar" }));
     expect(props.onOpenSettings).toHaveBeenCalledTimes(1);
 
-    await user.click(screen.getByRole("button", { name: "QBR Beta" }));
+    await user.click(screen.getByRole("button", { name: "Buscar notas (2)" }));
+    await user.click(screen.getByRole("option", { name: /QBR Beta/ }));
     expect(props.onSelectNote).toHaveBeenCalledWith("note-2");
 
     const titleInput = screen.getByPlaceholderText("Cliente ou título da call...");

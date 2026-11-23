@@ -224,7 +224,9 @@ describe("App (fluxos integrados do dock)", () => {
     await waitFor(() => {
       expect(screen.getByPlaceholderText("Cliente ou título da call...")).toHaveValue("");
     });
-    expect(screen.getByRole("button", { name: "Cliente Alpha" })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Buscar notas (2)" }));
+    expect(screen.getByRole("option", { name: /Cliente Alpha/ })).toBeInTheDocument();
+    await user.keyboard("{Escape}");
 
     act(() => {
       listeners.get("dock://state-changed")?.({
