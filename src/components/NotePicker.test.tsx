@@ -113,4 +113,82 @@ describe("NotePicker", () => {
 
     window.removeEventListener("keydown", windowEsc);
   });
+
+  it("reseta o destaque ao reabrir e limita o índice quando notas somem", async () => {
+    const user = userEvent.setup();
+    const onSelectNote = vi.fn();
+    const { rerender } = render(
+      <NotePicker notes={NOTES} activeNoteId="n1" onSelectNote={onSelectNote} />
+    );
+    const trigger = screen.getByRole("button", { name: "Buscar notas (3)" });
+
+    await user.click(trigger);
+    await user.keyboard("{ArrowDown}{ArrowDown}");
+    expect(screen.getAllByRole("option")[2]).toHaveAttribute("aria-selected", "true");
+    await user.click(trigger);
+    await user.click(trigger);
+    expect(screen.getAllByRole("option")[0]).toHaveAttribute("aria-selected", "true");
+
+    await user.keyboard("{ArrowDown}{ArrowDown}");
+    rerender(
+      <NotePicker notes={NOTES.slice(0, 2)} activeNoteId="n1" onSelectNote={onSelectNote} />
+    );
+    expect(screen.getAllByRole("option")[1]).toHaveAttribute("aria-selected", "true");
+    await user.keyboard("{Enter}");
+    expect(onSelectNote).toHaveBeenCalledWith("n2");
+  });
+
+  it("não grava índice negativo sem resultados e omite aria-controls", async () => {
+    const user = userEvent.setup();
+    renderPicker();
+    await user.click(screen.getByRole("button", { name: "Buscar notas (3)" }));
+    const input = screen.getByRole("combobox");
+    await user.type(input, "zzz");
+    expect(input).not.toHaveAttribute("aria-controls");
+    expect(input).not.toHaveAttribute("aria-activedescendant");
+    await user.keyboard("{ArrowDown}{ArrowDown}");
+    await user.clear(input);
+    expect(input).toHaveAttribute("aria-controls");
+    expect(screen.getAllByRole("option")[0]).toHaveAttribute("aria-selected", "true");
+  });
+
+  it("rola o item destacado para a área visível ao navegar por teclado", async () => {
+    const user = userEvent.setup();
+    const scrollIntoView = vi.fn();
+    Element.prototype.scrollIntoView = scrollIntoView;
+    renderPicker();
+    await user.click(screen.getByRole("button", { name: "Buscar notas (3)" }));
+    scrollIntoView.mockClear();
+    await user.keyboard("{ArrowDown}");
+    expect(scrollIntoView).toHaveBeenCalledWith({ block: "nearest" });
+    expect(scrollIntoView.mock.contexts.at(-1)).toBe(screen.getAllByRole("option")[1]);
+    delete (Element.prototype as Partial<Element>).scrollIntoView;
+  });
+
+  it("fecha com Esc fora do input sem recolher o dock e ao clicar fora", async () => {
+    const user = userEvent.setup();
+    const onSelectNote = vi.fn();
+    render(
+      <>
+        <button type="button">fora</button>
+        <NotePicker notes={NOTES} activeNoteId="n1" onSelectNote={onSelectNote} />
+      </>
+    );
+    const windowEsc = vi.fn();
+    window.addEventListener("keydown", windowEsc);
+    const trigger = screen.getByRole("button", { name: "Buscar notas (3)" });
+
+    await user.click(trigger);
+    trigger.focus();
+    await user.keyboard("{Escape}");
+    expect(screen.queryByRole("combobox")).not.toBeInTheDocument();
+    expect(windowEsc).not.toHaveBeenCalled();
+
+    await user.click(trigger);
+    await user.click(screen.getByRole("button", { name: "fora" }));
+    expect(screen.queryByRole("combobox")).not.toBeInTheDocument();
+    expect(onSelectNote).not.toHaveBeenCalled();
+
+    window.removeEventListener("keydown", windowEsc);
+  });
 });

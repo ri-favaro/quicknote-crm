@@ -11,7 +11,7 @@ interface NotePickerProps {
 function normalize(value: string): string {
   return value
     .normalize("NFD")
-    .replace(/[̀-ͯ]/g, "")
+    .replace(/[\u0300-\u036f]/g, "")
     .toLowerCase();
 }
 
@@ -32,7 +32,7 @@ export function formatRelativeTime(iso: string, now: Date = new Date()): string 
 
   const time = date.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
   const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  const startOfYesterday = new Date(startOfToday.getTime() - 86_400_000);
+  const startOfYesterday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1);
   if (date >= startOfToday) return `hoje ${time}`;
   if (date >= startOfYesterday) return `ontem ${time}`;
 
@@ -54,10 +54,13 @@ export function NotePicker({ notes, activeNoteId, onSelectNote }: NotePickerProp
   const [query, setQuery] = useState("");
   const [highlighted, setHighlighted] = useState(0);
   const triggerRef = useRef<HTMLButtonElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const listId = useId();
+  const optionId = (index: number) => `${listId}-opt-${index}`;
 
   const results = filterNotes(notes, query);
+  const activeIndex = results.length === 0 ? -1 : Math.min(highlighted, results.length - 1);
 
   useEffect(() => {
     if (open) inputRef.current?.focus();
@@ -67,37 +70,61 @@ export function NotePicker({ notes, activeNoteId, onSelectNote }: NotePickerProp
     setHighlighted(0);
   }, [query]);
 
-  const close = () => {
+  useEffect(() => {
+    if (!open || activeIndex < 0) return;
+    document.getElementById(optionId(activeIndex))?.scrollIntoView?.({ block: "nearest" });
+  }, [open, activeIndex]);
+
+  const dismiss = () => {
     setOpen(false);
     setQuery("");
+    setHighlighted(0);
+  };
+
+  const close = () => {
+    dismiss();
     triggerRef.current?.focus();
   };
 
   const select = (id: string) => {
     onSelectNote(id);
-    setOpen(false);
-    setQuery("");
+    dismiss();
   };
 
-  const handleKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
-    if (event.key === "Escape") {
+  useEffect(() => {
+    if (!open) return;
+    const onKeyDown = (event: globalThis.KeyboardEvent) => {
+      if (event.key !== "Escape") return;
       event.preventDefault();
       event.stopPropagation();
       close();
-    } else if (event.key === "ArrowDown") {
+    };
+    const onPointerDown = (event: PointerEvent) => {
+      const target = event.target as Node;
+      if (panelRef.current?.contains(target) || triggerRef.current?.contains(target)) return;
+      dismiss();
+    };
+    window.addEventListener("keydown", onKeyDown, true);
+    window.addEventListener("pointerdown", onPointerDown);
+    return () => {
+      window.removeEventListener("keydown", onKeyDown, true);
+      window.removeEventListener("pointerdown", onPointerDown);
+    };
+  }, [open]);
+
+  const handleKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
+    if (event.key === "ArrowDown") {
       event.preventDefault();
-      setHighlighted((i) => Math.min(i + 1, results.length - 1));
+      setHighlighted(Math.min(activeIndex + 1, Math.max(results.length - 1, 0)));
     } else if (event.key === "ArrowUp") {
       event.preventDefault();
-      setHighlighted((i) => Math.max(i - 1, 0));
+      setHighlighted(Math.max(activeIndex - 1, 0));
     } else if (event.key === "Enter") {
       event.preventDefault();
-      const note = results[highlighted];
+      const note = results[activeIndex];
       if (note) select(note.id);
     }
   };
-
-  const optionId = (index: number) => `${listId}-opt-${index}`;
 
   return (
     <>
@@ -119,7 +146,7 @@ export function NotePicker({ notes, activeNoteId, onSelectNote }: NotePickerProp
       </button>
 
       {open && (
-        <div className="order-last basis-full rounded-[12px] border border-border bg-secondary p-1.5">
+        <div ref={panelRef} className="order-last basis-full rounded-[12px] border border-border bg-secondary p-1.5">
           <div className="relative">
             <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
             <input
@@ -127,8 +154,8 @@ export function NotePicker({ notes, activeNoteId, onSelectNote }: NotePickerProp
               type="text"
               role="combobox"
               aria-expanded="true"
-              aria-controls={listId}
-              aria-activedescendant={results[highlighted] ? optionId(highlighted) : undefined}
+              aria-controls={results.length > 0 ? listId : undefined}
+              aria-activedescendant={activeIndex >= 0 ? optionId(activeIndex) : undefined}
               aria-label="Buscar por título ou conteúdo"
               placeholder="Buscar por título ou conteúdo..."
               value={query}
@@ -147,7 +174,7 @@ export function NotePicker({ notes, activeNoteId, onSelectNote }: NotePickerProp
               {results.map((note, index) => {
                 const snippet = noteSnippet(note.contentMd);
                 const isActive = note.id === activeNoteId;
-                const isHighlighted = index === highlighted;
+                const isHighlighted = index === activeIndex;
                 return (
                   <li
                     key={note.id}
