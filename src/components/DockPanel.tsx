@@ -37,6 +37,7 @@ import type { DockTab } from "./DockRail";
 import { PipedriveBar, type PipedriveDispatchState } from "./PipedriveBar";
 import { AppearanceSettingsCard } from "./AppearanceSettingsCard";
 import { IntegrationSettingsCard } from "./IntegrationSettingsCard";
+import { NotePicker } from "./NotePicker";
 import { ProfileSettingsCard } from "./ProfileSettingsCard";
 
 export type PersistenceStatus =
@@ -357,29 +358,14 @@ export function DockPanel({
               </div>
             )}
 
-            {notes.length > 1 && (
-              <div className="flex shrink-0 items-center gap-1.5 overflow-x-auto pb-0.5">
-                {notes.map((note) => {
-                  const selected = note.id === activeNote.id;
-                  return (
-                    <button
-                      key={note.id}
-                      type="button"
-                      onClick={() => onSelectNote(note.id)}
-                      className={`max-w-[140px] shrink-0 truncate rounded-lg border px-2.5 py-1 text-[11px] transition-[background-color,color,border-color] duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring cursor-pointer ${
-                        selected
-                          ? "border-primary/50 bg-accent text-accent-foreground"
-                          : "border-border bg-secondary text-foreground/70 hover:bg-muted hover:text-foreground"
-                      }`}
-                    >
-                      {note.title.trim() || "Sem título"}
-                    </button>
-                  );
-                })}
-              </div>
-            )}
-
-            <div className="flex items-center gap-1.5">
+            <div className="flex flex-wrap items-center gap-1.5">
+              {notes.length > 1 && (
+                <NotePicker
+                  notes={notes}
+                  activeNoteId={activeNote.id}
+                  onSelectNote={onSelectNote}
+                />
+              )}
               <input
                 type="text"
                 value={activeNote.title}

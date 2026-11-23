@@ -30,6 +30,7 @@ quicknote-crm/
 │   │   ├── AppearanceSettingsCard.tsx # Customização de tema, cor, largura e opacidade
 │   │   ├── DockPanel.tsx       # Painel expandido (notas, tarefas, ajustes)
 │   │   ├── IntegrationSettingsCard.tsx # Configuração local de Pipedrive, n8n e Supabase
+│   │   ├── NotePicker.tsx      # Seletor de notas com busca (título + conteúdo), data e deal
 │   │   ├── PipedriveBar.tsx    # Busca de deals e disparo para o Pipedrive
 │   │   └── ProfileSettingsCard.tsx # Configuração do perfil CS ativo
 │   ├── lib/
