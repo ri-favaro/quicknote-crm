@@ -21,6 +21,7 @@ quicknote-crm/
 │   ├── README.md
 │   ├── blueprint.md
 │   ├── architecture.md
+│   ├── changelog.html
 │   ├── data-model.md
 │   ├── integrations.md
 │   └── multi-os-checklist.md
