@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>QuickNote CRM — Changelog</title>
+  <style>
+    :root {
+      --bg: #0B1120;
+      --panel: #111827;
+      --border: #1F2937;
+      --text: #F8FAFC;
+      --muted: #94A3B8;
+      --accent: #8B5CF6;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.62;
+    }
+    .layout {
+      max-width: 1120px;
+      margin: 0 auto;
+      display: grid;
+      grid-template-columns: 270px 1fr;
+      gap: 32px;
+      padding: 40px 24px 80px;
+    }
+    aside {
+      position: sticky;
+      top: 24px;
+      align-self: start;
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 20px;
+    }
+    .aside-head { margin-bottom: 14px; }
+    .aside-head h2 { font-size: 1.05rem; color: #FFFFFF; }
+    .aside-head p { font-size: 0.8rem; color: var(--muted); }
+    .search {
+      width: 100%;
+      padding: 9px 12px;
+      border-radius: 10px;
+      border: 1px solid var(--border);
+      background: #0B1120;
+      color: var(--text);
+      font-size: 0.86rem;
+      margin-bottom: 14px;
+      outline: none;
+    }
+    .search:focus { border-color: var(--accent); }
+    .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 18px; }
+    .chip {
+      font-size: 0.76rem;
+      font-weight: 600;
+      padding: 4px 10px;
+      border-radius: 999px;
+      border: 1px solid var(--border);
+      background: #0B1120;
+      color: var(--muted);
+      cursor: pointer;
+    }
+    .chip.active { background: var(--accent); color: #FFFFFF; border-color: var(--accent); }
+    .nav-list { list-style: none; display: flex; flex-direction: column; gap: 4px; }
+    .nav-list a {
+      display: block;
+      text-decoration: none;
+      color: #CBD5E1;
+      font-size: 0.86rem;
+      padding: 7px 10px;
+      border-radius: 8px;
+    }
+    .nav-list a:hover { background: #1E293B; color: #FFFFFF; }
+    .banner {
+      background: linear-gradient(120deg, #1E1B4B, #111827);
+      border: 1px solid #312E81;
+      border-radius: 16px;
+      padding: 24px 28px;
+      margin-bottom: 24px;
+    }
+    .banner h1 { font-size: 1.9rem; margin-bottom: 6px; }
+    .banner p { color: #CBD5E1; font-size: 0.96rem; }
+    .entry {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-left: 4px solid var(--accent);
+      border-radius: 14px;
+      padding: 22px 24px;
+      margin-bottom: 16px;
+    }
+    .entry[data-cat="crm"] { border-left-color: #10B981; }
+    .entry[data-cat="ui"] { border-left-color: #38BDF8; }
+    .entry[data-cat="infra"] { border-left-color: #F59E0B; }
+    .entry-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-bottom: 8px;
+    }
+    .entry h3 { font-size: 1.18rem; color: #FFFFFF; }
+    .stamp { font-size: 0.8rem; color: var(--muted); font-weight: 600; }
+    .entry ul { padding-left: 18px; margin-top: 10px; }
+    .entry li { margin-bottom: 8px; font-size: 0.93rem; color: #CBD5E1; }
+    .hidden { display: none; }
+    footer {
+      margin-top: 28px;
+      font-size: 0.82rem;
+      color: var(--muted);
+      text-align: right;
+    }
+    @media (max-width: 800px) {
+      .layout { grid-template-columns: 1fr; }
+      aside { position: static; }
+    }
+  </style>
+</head>
+<body>
+  <div class="layout">
+    <aside>
+      <div class="aside-head">
+        <h2>QuickNote CRM</h2>
+        <p>Histórico de recursos e entregas</p>
+      </div>
+      <input class="search" id="search" type="search" placeholder="Buscar recurso..." aria-label="Buscar recurso" />
+      <div class="chips" role="group" aria-label="Filtrar categoria">
+        <button class="chip active" data-cat="all">Tudo</button>
+        <button class="chip" data-cat="crm">Integrações</button>
+        <button class="chip" data-cat="ui">Visual</button>
+        <button class="chip" data-cat="infra">Base &amp; Build</button>
+      </div>
+      <ul class="nav-list">
+        <li><a href="#seletor-notas">Seletor de Notas com Busca</a></li>
+        <li><a href="#macos-gatekeeper-docs">Mac (Gatekeeper) &amp; Docs</a></li>
+        <li><a href="#changelog-auto">Novidade — Changelog Automático</a></li>
+        <li><a href="#v010">v0.1.0 — Releases &amp; Ajustes</a></li>
+        <li><a href="#pipedrive">Etapa 4 — Pipedrive</a></li>
+        <li><a href="#visual">Visual &amp; Tema Escuro</a></li>
+        <li><a href="#mvp">Etapas 1–3 — Base MVP</a></li>
+      </ul>
+    </aside>
+
+    <main>
+      <div class="banner">
+        <h1>Changelog do QuickNote CRM</h1>
+        <p>Acompanhe cada entrega por área ou busque diretamente pelo recurso implementado.</p>
+      </div>
+
+      <section class="entry" id="seletor-notas" data-cat="ui">
+        <div class="entry-top">
+          <h3>Seletor de Notas com Busca e Prévia</h3>
+          <span class="stamp">23/11/2026 • PR #31</span>
+        </div>
+        <ul>
+          <li><strong>Busca instantânea nas notas:</strong> a antiga faixa horizontal de botões deu lugar a uma lista vertical com busca por título ou conteúdo, sem se preocupar com acentos ou letras maiúsculas.</li>
+          <li><strong>Mais contexto antes de abrir:</strong> cada item agora mostra um trecho da anotação, há quanto tempo foi editado e um indicador quando a nota já está vinculada a um negócio no Pipedrive.</li>
+          <li><strong>Navegação pelo teclado:</strong> troque de nota rapidamente usando as setas, Enter para abrir e Esc para fechar apenas o seletor.</li>
+        </ul>
+      </section>
+
+      <section class="entry" id="macos-gatekeeper-docs" data-cat="infra">
+        <div class="entry-top">
+          <h3>Liberação no Mac e Documentação Alinhada</h3>
+          <span class="stamp">23/11/2026 • PR #28–#29</span>
+        </div>
+        <ul>
+          <li><strong>Instalação mais simples no macOS:</strong> o pacote do app agora recebe assinatura ad-hoc completa, evitando que o Gatekeeper acuse o arquivo como danificado e permitindo liberar a abertura em <em>Ajustes do Sistema → Privacidade e Segurança</em>.</li>
+          <li><strong>Guias e README atualizados:</strong> documentação revisada para refletir exatamente os componentes atuais e deixar claro que o envio real de dados está ativo no Pipedrive, enquanto n8n e Supabase seguem em preparação.</li>
+        </ul>
+      </section>
+
+      <section class="entry" id="changelog-auto" data-cat="infra">
+        <div class="entry-top">
+          <h3>Notas de Versão Automáticas nos Lançamentos</h3>
+          <span class="stamp">22/11/2026 • PR #27</span>
+        </div>
+        <ul>
+          <li><strong>Histórico de mudanças organizado:</strong> o projeto agora gera automaticamente um registro claro em português com todas as novidades, melhorias visuais e correções de cada versão.</li>
+          <li><strong>Releases mais completas:</strong> ao publicar uma nova versão, a página de download passa a exibir automaticamente o resumo do que mudou junto aos instaladores.</li>
+        </ul>
+      </section>
+
+      <section class="entry" id="v010" data-cat="infra">
+        <div class="entry-top">
+          <h3>v0.1.0 — Instaladores Multi-OS e Ajustes na UI</h3>
+          <span class="stamp">Novembro 2026 • PR #23–#25</span>
+        </div>
+        <ul>
+          <li><strong>Configuração na própria interface:</strong> URLs e chaves de Pipedrive, n8n e Supabase salvas no SQLite local pela aba de Ajustes.</li>
+          <li><strong>GitHub Releases automático:</strong> instaladores para Windows (<code>.exe</code>/<code>.msi</code>), macOS (<code>.dmg</code>) e Linux (<code>.AppImage</code>/<code>.deb</code>).</li>
+          <li><strong>Customização do dock:</strong> ajustes de aparência e contraste no tema claro.</li>
+        </ul>
+      </section>
+
+      <section class="entry" id="pipedrive" data-cat="crm">
+        <div class="entry-top">
+          <h3>Etapa 4 — Integração com Pipedrive</h3>
+          <span class="stamp">PR #14–#15</span>
+        </div>
+        <ul>
+          <li><strong>Busca de deals:</strong> pesquise negócios do Pipedrive no dock e associe à nota.</li>
+          <li><strong>Notas e Atividades:</strong> publique registros direto no negócio selecionado.</li>
+        </ul>
+      </section>
+
+      <section class="entry" id="visual" data-cat="ui">
+        <div class="entry-top">
+          <h3>Visual — Paleta Azul-Marinho &amp; Roxo</h3>
+          <span class="stamp">PR #6, #13, #21</span>
+        </div>
+        <ul>
+          <li><strong>Tema escuro dedicado:</strong> azul-marinho profundo com destaque roxo para botões principais.</li>
+          <li><strong>Layout compacto:</strong> melhorias de contraste e redimensionamento do dock.</li>
+        </ul>
+      </section>
+
+      <section class="entry" id="mvp" data-cat="infra">
+        <div class="entry-top">
+          <h3>Etapas 1–3 — Base do Produto</h3>
+          <span class="stamp">PR #1–#7, #22</span>
+        </div>
+        <ul>
+          <li><strong>Dock lateral Tauri v2:</strong> aplicativo leve ancorado na borda da tela.</li>
+          <li><strong>Notas, To-dos e CI:</strong> persistência local em SQLite e suíte de testes automatizados.</li>
+        </ul>
+      </section>
+
+      <footer>Atualizado até a PR #31 (23/11/2026)</footer>
+    </main>
+  </div>
+
+  <script>
+    const input = document.getElementById('search');
+    const chips = document.querySelectorAll('.chip');
+    const entries = document.querySelectorAll('.entry');
+    let activeCat = 'all';
+
+    function applyFilters() {
+      const q = input.value.trim().toLowerCase();
+      entries.forEach((el) => {
+        const matchCat = activeCat === 'all' || el.dataset.cat === activeCat;
+        const matchText = q === '' || el.textContent.toLowerCase().includes(q);
+        el.classList.toggle('hidden', !(matchCat && matchText));
+      });
+    }
+
+    input.addEventListener('input', applyFilters);
+    chips.forEach((chip) => {
+      chip.addEventListener('click', () => {
+        chips.forEach((c) => c.classList.remove('active'));
+        chip.classList.add('active');
+        activeCat = chip.dataset.cat;
+        applyFilters();
+      });
+    });
+  </script>
+</body>
+</html>
