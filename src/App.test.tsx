@@ -10,6 +10,7 @@ import {
   setDockEdge,
   setDockExpanded,
   DEFAULT_DOCK_APPEARANCE,
+  DEFAULT_INTEGRATION_SETTINGS,
   type ActiveProfile,
   type DockAppearance,
   type DockState,
@@ -60,6 +61,7 @@ function mockTauriInvoke(overrides: Record<string, InvokeHandler> = {}) {
     list_notes: () => [],
     list_todos: () => [],
     get_active_profile: () => DEFAULT_FALLBACK_PROFILE,
+    get_integration_settings: () => DEFAULT_INTEGRATION_SETTINGS,
     ...overrides,
   };
 
@@ -341,8 +343,9 @@ describe("App (fluxos integrados do dock)", () => {
     listenMock.mockResolvedValue(vi.fn());
 
     const { container, unmount } = render(<App />);
-    const shell = container.firstElementChild as HTMLElement;
-    expect(shell.style.opacity).toBe("1");
+    const shell = container.querySelector<HTMLElement>("[data-theme]");
+    expect(shell).not.toBeNull();
+    expect(shell?.style.opacity).toBe("1");
     expect(shell).toHaveAttribute("data-theme", "dark");
 
     await user.click(screen.getByRole("button", { name: "Posição do dock e ajustes" }));
@@ -359,23 +362,24 @@ describe("App (fluxos integrados do dock)", () => {
     expect(shell).toHaveAttribute("data-accent", "emerald");
     expect(shell).toHaveAttribute("data-panel-size", "wide");
     expect(document.documentElement.dataset.theme).toBe("light");
-    expect(shell.style.opacity).toBe("0.8");
+    expect(shell?.style.opacity).toBe("0.8");
 
     await user.keyboard("{Escape}");
     await waitFor(() => {
       expect(screen.queryByRole("slider", { name: "Opacidade expandido" })).not.toBeInTheDocument();
     });
-    expect(shell.style.opacity).toBe("0.55");
+    expect(shell?.style.opacity).toBe("0.55");
 
     unmount();
 
     const remounted = render(<App />);
-    const remountedShell = remounted.container.firstElementChild as HTMLElement;
+    const remountedShell = remounted.container.querySelector<HTMLElement>("[data-theme]");
+    expect(remountedShell).not.toBeNull();
     await waitFor(() => {
       expect(remountedShell).toHaveAttribute("data-theme", "light");
       expect(remountedShell).toHaveAttribute("data-accent", "emerald");
       expect(remountedShell).toHaveAttribute("data-panel-size", "wide");
-      expect(remountedShell.style.opacity).toBe("0.55");
+      expect(remountedShell?.style.opacity).toBe("0.55");
     });
 
     await user.click(screen.getByRole("button", { name: "Posição do dock e ajustes" }));
@@ -385,7 +389,7 @@ describe("App (fluxos integrados do dock)", () => {
       expect(remountedShell).toHaveAttribute("data-theme", "dark");
       expect(remountedShell).toHaveAttribute("data-accent", "violet");
       expect(remountedShell).toHaveAttribute("data-panel-size", "default");
-      expect(remountedShell.style.opacity).toBe("1");
+      expect(remountedShell?.style.opacity).toBe("1");
     });
     remounted.unmount();
   });
